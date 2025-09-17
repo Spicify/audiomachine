@@ -1,0 +1,1 @@
+nltk_data/corpora/wordnet.zip filter=lfs diff=lfs merge=lfs -text
