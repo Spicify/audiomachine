@@ -1,33 +1,44 @@
 # Deployment Guide (Render)
 
-## Python Version
+## Do not add `pyaudioop`
 
-- Render ignores `runtime.txt` for Python services. Set an environment variable instead:
-  - Key: `PYTHON_VERSION`
-  - Value: `3.11.0`
-- This ensures built-in `audioop` remains available for dependencies like `pydub`.
+- `pyaudioop` is not published on PyPI. Do not add it to `requirements.txt`.
+- The correct fix for `ModuleNotFoundError: No module named 'pyaudioop'` on Render is to run Python 3.11 where `audioop` is built in.
 
-## Fallback (if using Python 3.13+)
+## Pin Python 3.11 on Render (native runtime)
 
-- `requirements.txt` includes `pyaudioop` to satisfy `pydub`'s fallback when `audioop` is absent.
-- No app code changes required.
+We ship a `render.yaml` that pins the Python version:
 
-## Dependencies
+- File: `render.yaml`
+- Sets env var `PYTHON_VERSION=3.11.0`
+- Uses `streamlit run app.py --server.port=8080`
 
-- `requirements.txt` lists all Python packages. Render will `pip install -r requirements.txt`.
-- `packages.txt` (optional) installs system packages; ensure `ffmpeg` is present (our Dockerfile installs it directly when used).
+If configuring via the dashboard instead of `render.yaml`:
 
-## Using Docker (alternative)
+1. Open your service in the Render dashboard.
+2. Go to Settings → Environment.
+3. Add env var: `PYTHON_VERSION=3.11.0`.
+4. Save and redeploy.
 
-- The included `Dockerfile` pins `python:3.11-slim` and installs `ffmpeg`.
-- On Render, choose a Docker-based service and point to this `Dockerfile` to fully control the runtime.
+This ensures `audioop` is available and `pydub` loads without falling back to `pyaudioop`.
 
-## Streamlit Service
+## runtime.txt
 
-- App entry: `streamlit run app.py` (port `8080`). Ensure the service exposes port `8080`.
-- Relevant env vars are already set in the Dockerfile for headless Streamlit.
+- `runtime.txt` is present with `python-3.11.0` but is ignored by Render's native Python services.
+- Keep it to document the intended local runtime, but do not rely on it for Render.
 
-## Summary
+## Docker (alternative)
 
-- Preferred: set `PYTHON_VERSION=3.11.0` on Render to match local and keep `audioop`.
-- Fallback safety: `pyaudioop` is installed, so Python 3.13 also works.
+- The included `Dockerfile` uses `FROM python:3.11-slim` and installs `ffmpeg`.
+- On Render, choose a Docker-based Web Service to guarantee the exact runtime.
+
+## Streamlit service details
+
+- Port: `8080` (exposed via `EXPOSE 8080` in Dockerfile and set in `render.yaml` start command).
+- Headless and CORS settings handled by environment variables in Dockerfile; `render.yaml` uses default Streamlit headless flags.
+
+## Re-deploy checklist
+
+- [ ] `requirements.txt` contains no `pyaudioop` entry.
+- [ ] `PYTHON_VERSION=3.11.0` set (via `render.yaml` or dashboard).
+- [ ] Redeploy service → verify build uses Python 3.11.x and app starts.
