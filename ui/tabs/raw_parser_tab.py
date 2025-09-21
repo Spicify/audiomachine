@@ -227,20 +227,22 @@ def create_raw_parser_tab(get_known_characters_callable):
         st.session_state["parsing_in_progress"] = False
         print("[raw_parser_tab] Parsing completed")
 
-        # --- Phase 2: After parsing finishes, show chunked outputs with ambiguity resolution ---
-        if st.session_state.get("stream_chunks") and not st.session_state.get("raw_finalized"):
-            for i, ch in enumerate(st.session_state["stream_chunks"], start=1):
-                with st.container():
-                    st.markdown(f"**Chunk {i} Output**")
-                    # Pretty-format dialogues for display
-                    lines = []
-                    for d in (ch.get("dialogues") or []):
-                        em = "".join(
-                            [f"({e})" for e in (d.get("emotions") or [])])
-                        lines.append(
-                            f"[{d.get('character')}] {em}: {d.get('text')}")
-                    if lines:
-                        st.code("\n".join(lines), language="markdown")
+    # --- Phase 2: After parsing finishes, show chunked outputs with ambiguity resolution ---
+    if st.session_state.get("stream_chunks") and not st.session_state.get("raw_finalized"):
+        print("[raw_parser_tab] Phase 2 rendering with", len(
+            st.session_state.get("stream_chunks", [])), "chunks")
+        for i, ch in enumerate(st.session_state["stream_chunks"], start=1):
+            with st.container():
+                st.markdown(f"**Chunk {i} Output**")
+                # Pretty-format dialogues for display
+                lines = []
+                for d in (ch.get("dialogues") or []):
+                    em = "".join(
+                        [f"({e})" for e in (d.get("emotions") or [])])
+                    lines.append(
+                        f"[{d.get('character')}] {em}: {d.get('text')}")
+                if lines:
+                    st.code("\n".join(lines), language="markdown")
 
                     # Ambiguities for this chunk
                     ambs = list(ch.get("ambiguities") or [])
@@ -315,50 +317,51 @@ def create_raw_parser_tab(get_known_characters_callable):
                                     # Persist chosen existing option
                                     st.session_state["ambiguity_choices"][choice_key] = selection
 
-            # Consolidation action
-            st.markdown("---")
-            if st.button("Update Ambiguities", type="primary", use_container_width=True, key="apply_ambiguities"):
-                # Apply user selections and build final consolidated output
-                updated_dialogues = []
-                for ch in st.session_state.get("stream_chunks", []):
-                    chunk_index = ch.get("index")
-                    for d in (ch.get("dialogues") or []):
-                        if str(d.get("character", "")).lower() == "ambiguous":
-                            amb_id = d.get("id")
-                            choice_key = f"{chunk_index}:{amb_id}"
-                            chosen = st.session_state["ambiguity_choices"].get(
-                                choice_key)
-                            if chosen and chosen.strip():
-                                nd = dict(d)
-                                nd["character"] = chosen.strip()
-                                updated_dialogues.append(nd)
-                                continue
-                        updated_dialogues.append(d)
-                # Finalize consolidated output
-                parser = OpenAIParser(include_narration=include_narration)
-                result = parser.finalize_stream(
-                    updated_dialogues, include_narration=include_narration)
-                st.session_state["raw_last_formatted_text"] = result.formatted_text
-                st.session_state["raw_last_dialogues"] = result.dialogues
-                st.session_state["raw_finalized"] = True
+        # Consolidation action
+        st.markdown("---")
+        if st.button("Update Ambiguities", type="primary", use_container_width=True, key="apply_ambiguities"):
+            # Apply user selections and build final consolidated output
+            updated_dialogues = []
+            for ch in st.session_state.get("stream_chunks", []):
+                chunk_index = ch.get("index")
+                for d in (ch.get("dialogues") or []):
+                    if str(d.get("character", "")).lower() == "ambiguous":
+                        amb_id = d.get("id")
+                        choice_key = f"{chunk_index}:{amb_id}"
+                        chosen = st.session_state["ambiguity_choices"].get(
+                            choice_key)
+                        if chosen and chosen.strip():
+                            nd = dict(d)
+                            nd["character"] = chosen.strip()
+                            updated_dialogues.append(nd)
+                            continue
+                    updated_dialogues.append(d)
+            # Finalize consolidated output
+            parser = OpenAIParser(include_narration=include_narration)
+            result = parser.finalize_stream(
+                updated_dialogues, include_narration=include_narration)
+            st.session_state["raw_last_formatted_text"] = result.formatted_text
+            st.session_state["raw_last_dialogues"] = result.dialogues
+            st.session_state["raw_finalized"] = True
 
-        # --- Final consolidated output view ---
-        if st.session_state.get("raw_finalized") and st.session_state.get("raw_last_formatted_text"):
-            st.success("✅ Parsed successfully.")
-            st.markdown("#### ▶ Standardized Output")
-            st.code(
-                st.session_state["raw_last_formatted_text"], language="markdown")
-            colA, colB = st.columns([1, 1])
-            with colA:
-                if st.button("→ Send to Main Generator", key="raw_send_to_main", type="primary", use_container_width=True):
-                    st.session_state.dialogue_text = st.session_state["raw_last_formatted_text"]
-                    for k in ("paste_text_analysis", "paste_formatted_dialogue", "paste_parsed_dialogues", "paste_voice_assignments"):
-                        st.session_state.pop(k, None)
-                    st.session_state.current_tab = "main"
-                    st.info("Parsed output sent to Main Generator.")
-            with colB:
-                if st.button("🗑 Reset Parsed Output", key="raw_reset", type="secondary", use_container_width=True):
-                    for k in ("raw_last_formatted_text", "raw_last_dialogues", "raw_finalized"):
-                        st.session_state.pop(k, None)
-                    st.session_state["stream_chunks"] = []
-                    st.success("Reset completed.")
+    # --- Final consolidated output view ---
+    if st.session_state.get("raw_finalized") and st.session_state.get("raw_last_formatted_text"):
+        print("[raw_parser_tab] Final consolidated output rendering")
+        st.success("✅ Parsed successfully.")
+        st.markdown("#### ▶ Standardized Output")
+        st.code(
+            st.session_state["raw_last_formatted_text"], language="markdown")
+        colA, colB = st.columns([1, 1])
+        with colA:
+            if st.button("→ Send to Main Generator", key="raw_send_to_main", type="primary", use_container_width=True):
+                st.session_state.dialogue_text = st.session_state["raw_last_formatted_text"]
+                for k in ("paste_text_analysis", "paste_formatted_dialogue", "paste_parsed_dialogues", "paste_voice_assignments"):
+                    st.session_state.pop(k, None)
+                st.session_state.current_tab = "main"
+                st.info("Parsed output sent to Main Generator.")
+        with colB:
+            if st.button("🗑 Reset Parsed Output", key="raw_reset", type="secondary", use_container_width=True):
+                for k in ("raw_last_formatted_text", "raw_last_dialogues", "raw_finalized"):
+                    st.session_state.pop(k, None)
+                st.session_state["stream_chunks"] = []
+                st.success("Reset completed.")
