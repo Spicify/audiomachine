@@ -114,11 +114,43 @@ def create_raw_parser_tab(get_known_characters_callable):
         def render_progress(pct: int):
             pct = max(0, min(100, int(pct)))
             progress_text_placeholder.markdown(f"**Progress: {pct}%**")
-            progress_placeholder.progress(pct / 100.0)
+            bar_html = f"""
+            <div class=\"pb-wrapper\">
+              <div class=\"pb-track\">
+                <div class=\"pb-fill\" style=\"width: {pct}%;\">
+                  <span class=\"pb-inside-label\">{pct}%</span>
+                </div>
+              </div>
+            </div>
+            <style>
+            .pb-wrapper {{ width: 100%; }}
+            .pb-track {{
+              width: 100%;
+              height: 18px;
+              background: #edf2f7; /* light grey */
+              border-radius: 10px;
+              overflow: hidden;
+              border: 1px solid #e2e8f0;
+            }}
+            .pb-fill {{
+              height: 100%;
+              background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+              transition: width 250ms ease;
+              display: flex;
+              align-items: center;
+              justify-content: flex-end;
+              color: #fff;
+              border-radius: 10px;
+            }}
+            .pb-inside-label {{
+              font-size: 12px; font-weight: 600; padding-right: 8px; color: #fff;
+            }}
+            </style>
+            """
+            progress_placeholder.markdown(bar_html, unsafe_allow_html=True)
 
         # Initialize progress UI at 0% before any chunk is processed
-        progress_text_placeholder.markdown("**Progress: 0%**")
-        progress_placeholder.progress(0.0)
+        render_progress(0)
         status_placeholder.caption(
             "Please wait while all chunks are processed.")
         print("[raw_parser_tab] Parsing loop starting")
@@ -217,8 +249,7 @@ def create_raw_parser_tab(get_known_characters_callable):
 
         # Fill to 100%
         for p in range(current_percent + 1, 101):
-            progress_text_placeholder.markdown(f"**Progress: {p}%**")
-            progress_placeholder.progress(p / 100.0)
+            render_progress(p)
             time.sleep(0.01)
 
         # Done: sort and clear spinner
