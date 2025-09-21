@@ -61,16 +61,19 @@ def create_navigation_sidebar():
                             st.session_state.emotion_to_add = f"({emotion})"
                 st.divider()
 
-        # Characters Accordion
+        # Characters: single-level expander forbidden; emulate nested with category expanders and per-character toggles
         with st.expander("👥 Available Characters", expanded=False):
-            for category, characters in CHARACTER_VOICES.items():
-                st.markdown(f"**{category}**")
-
-                for char, vid in characters.items():
-                    with st.container():
-                        st.markdown(f"**{char}**")
-                        st.code(vid, language=None)
-                st.divider()
+            # Use selectboxes to avoid nested expander issues
+            categories = list(CHARACTER_VOICES.keys())
+            sel_cat = st.selectbox(
+                "Category", options=categories, key="avail_chars_cat")
+            if sel_cat:
+                chars = list(CHARACTER_VOICES[sel_cat].keys())
+                sel_char = st.selectbox("Character", options=[
+                                        ""] + chars, key=f"avail_chars_char_{sel_cat}")
+                if sel_char:
+                    st.markdown(f"**{sel_char}**")
+                    st.code(CHARACTER_VOICES[sel_cat][sel_char], language=None)
 
         # Sound Effects removed from application
 

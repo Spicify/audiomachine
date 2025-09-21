@@ -1,4 +1,4 @@
-from parsers.openai_parser import OpenAIParser
+from parsers.openai_parser.openai_parser import OpenAIParser
 
 
 def run_tests():
@@ -81,7 +81,7 @@ def run_tests():
         print("===============================")
 
         parser = OpenAIParser(
-            include_narration=include_narration, detect_fx=True)
+            include_narration=include_narration)
 
         for t in tests:
             result = parser.convert(t["input"])

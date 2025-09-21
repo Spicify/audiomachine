@@ -4,16 +4,13 @@ from ui.auth import check_password
 from ui.sidebar import create_navigation_sidebar
 from ui.upload import create_file_upload_interface
 from parsers.text_parser import TextParser, cached_analyze_text, batched_analyze_text
-from parsers.openai_parser import OpenAIParser
+from parsers.openai_parser.openai_parser import OpenAIParser
 from audio.utils import get_flat_character_voices
 from ui.analysis import display_analysis_results, create_voice_management_interface
-from ui.tabs import (
-    create_teaser_generator_tab,
-    create_emotion_preview_tab,
-    create_voice_manager_tab,
-    create_raw_parser_tab,
-    generate_audio_for_tab
-)
+from ui.tabs.teaser_tab import create_teaser_generator_tab
+from ui.tabs.emotion_preview_tab import create_emotion_preview_tab
+from ui.tabs.voice_manager_tab import create_voice_manager_tab
+from ui.tabs.raw_parser_tab import create_raw_parser_tab
 from ui.history import create_history_tab
 from utils.chunking import chunk_text
 from audio.batch_generator import ResumableBatchGenerator

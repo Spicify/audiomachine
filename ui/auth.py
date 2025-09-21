@@ -22,19 +22,21 @@ def check_password():
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### 🔐 Enter Access Password")
-        password = st.text_input(
-            "Password:", type="password", key="password_input")
-
-        if st.button("🚀 Access System", type="primary", use_container_width=True):
-            if password in VALID_PASSWORDS:
-                st.session_state.authenticated = True
-                st.session_state.user_type = VALID_PASSWORDS[password]
-                st.success("✅ Access granted! Redirecting...")
-                st.rerun()
-            else:
-                st.error(
-                    "❌ Invalid password. Please contact the administrator for access.")
+        with st.form("login_form"):
+            st.markdown("### 🔐 Enter Access Password")
+            password = st.text_input(
+                "Password:", type="password", key="password_input")
+            submitted = st.form_submit_button(
+                "🚀 Access System", use_container_width=True, type="primary")
+            if submitted:
+                if password in VALID_PASSWORDS:
+                    st.session_state.authenticated = True
+                    st.session_state.user_type = VALID_PASSWORDS[password]
+                    st.success("✅ Access granted! Redirecting...")
+                    st.rerun()
+                else:
+                    st.error(
+                        "❌ Invalid password. Please contact the administrator for access.")
 
         st.markdown("---")
         st.info("🔒 This system is password-protected for authorized users only.")

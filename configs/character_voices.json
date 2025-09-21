@@ -1,5 +1,25 @@
 {
   "🔥 Male Leads": {
+    "Mikhail": {
+      "voice_id": "Rp26tQpCpCg54ycIUr7H",
+      "gender": "M"
+    },
+    "Professor": {
+      "voice_id": "8S6ZMgJCL5LeTTGNzKye",
+      "gender": "M"
+    },
+    "Dante": {
+      "voice_id": "abFrD0U0thqiU9PxyaXb",
+      "gender": "M"
+    },
+    "Enzo": {
+      "voice_id": "kM3yB77Ab8wxBqDgYTWt",
+      "gender": "M"
+    },
+    "Julian": {
+      "voice_id": "K6GcKaT2TS3Brh5oRlXD",
+      "gender": "M"
+    },
     "Brad": {
       "voice_id": "KH1SQLVulwP6uG4O3nmT",
       "gender": "M"
@@ -22,6 +42,14 @@
     }
   },
   "💖 Female Leads": {
+    "Aria": {
+      "voice_id": "P273DEoBwlO5ev6lwsRO",
+      "gender": "F"
+    },
+    "Clara": {
+      "voice_id": "jxm3fmkmDwLjT00e5PO1",
+      "gender": "F"
+    },
     "Arabella": {
       "voice_id": "aEO01A4wXwd1O8GPgGlF",
       "gender": "F"
@@ -44,6 +72,22 @@
     }
   },
   "👨‍👩‍👧‍👦 Family Characters": {
+    "Dad": {
+      "voice_id": "tukRtMY4szwA3WVu1E0n",
+      "gender": "M"
+    },
+    "Mother": {
+      "voice_id": "gQvztCKhpqj5IADlaegH",
+      "gender": "F"
+    },
+    "Mom": {
+      "voice_id": "7CLuuwn7OqA1vfbgHkH1",
+      "gender": "F"
+    },
+    "Victor": {
+      "voice_id": "H9SBJaXcZ8P6aGCFtTrE",
+      "gender": "M"
+    },
     "Grandpa Spuds Oxley": {
       "voice_id": "NOpBlnGInO9m6vDvFkFC",
       "gender": "M"
@@ -70,6 +114,10 @@
     }
   },
   "💼 Mafia/Bodyguards": {
+    "Guard": {
+      "voice_id": "dgWmurH8VCqHYZ6Wgmw3",
+      "gender": "M"
+    },
     "Christian": {
       "voice_id": "6xPz2opT0y5qtoRh1U1Y",
       "gender": "M"
@@ -88,6 +136,14 @@
     }
   },
   "👫 Supporting Characters": {
+    "Sister": {
+      "voice_id": "frErotKJe0vq52U5gm8P",
+      "gender": "F"
+    },
+    "Maid": {
+      "voice_id": "cvcYO3vyInKW4WoThogz",
+      "gender": "F"
+    },
     "Burt Reynolds": {
       "voice_id": "4YYIPFl9wE5c4L2eu2Gb",
       "gender": "M"
@@ -150,7 +206,7 @@
       "voice_id": "i4CzbCVWoqvD0P1QJCUL",
       "gender": "F"
     },
-    "Clara": {
+    "Clara (Secondary)": {
       "voice_id": "Qggl4b0xRMiqOwhPtVWT",
       "gender": "F"
     },
