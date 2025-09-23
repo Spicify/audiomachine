@@ -13,6 +13,7 @@ from ui.tabs.voice_manager_tab import create_voice_manager_tab
 from ui.tabs.raw_parser_tab import create_raw_parser_tab
 from ui.history import create_history_tab
 from utils.chunking import chunk_text
+from parsers.dialogue_parser import DialogueParser
 from audio.batch_generator import ResumableBatchGenerator
 from utils.state_manager import ProjectStateManager
 from utils.s3_utils import s3_generate_presigned_url, s3_get_bytes
@@ -30,10 +31,10 @@ def create_main_generator_content():
 
     # Initialize session state with example text but no analysis
     if 'dialogue_text' not in st.session_state:
-        st.session_state.dialogue_text = """[Brad] (whispers)(excited): The security system is down. This is our chance. *apartmentcreaks*
-[Arabella] (sighs)(frustrated): I still don't like this plan, Brad. *gasps*
-[Grandpa Spuds Oxley] (mischievously): Relax, tesoro. What could go wrong? *laughs*
-[Christian] (cold)(calm): Everything. That's what experience teaches you. *growls*"""
+        st.session_state.dialogue_text = """[Brad] (whispers)(excited): The security system is down. This is our chance.
+[Arabella] (sighs)(frustrated): I still don't like this plan, Brad. 
+[Grandpa Spuds Oxley] (mischievously): Relax, tesoro. What could go wrong?
+[Christian] (cold)(calm): Everything. That's what experience teaches you."""
 
     # Initialize upload dialogue text separately
     if 'upload_dialogue_text' not in st.session_state:
@@ -335,9 +336,69 @@ def _run_resumable_generation(full_text: str, project_name: str):
     prog = st.progress(0)
     info = st.empty()
 
+    # --- Compute expected TTS sub-chunk totals for accurate UI ---
+    try:
+        parser = DialogueParser()
+        assignments = None
+        # Mimic generator assignment resolution
+        for key in ("paste_voice_assignments", "upload_voice_assignments", "vm_voice_mappings"):
+            if key in st.session_state and isinstance(st.session_state[key], dict) and st.session_state[key]:
+                assignments = st.session_state[key]
+                break
+        seq = parser.parse_dialogue(full_text, assignments)
+        speech_texts = [e.get("text", "")
+                        for e in (seq or []) if e.get("type") == "speech"]
+
+        def _smart_subchunks_ui(text: str, limit: int = 200):
+            t = (text or "").strip()
+            if not t:
+                return []
+            if len(t) <= limit:
+                return [t]
+            parts = []
+            start = 0
+            while start < len(t):
+                remaining = t[start:]
+                if len(remaining) <= limit:
+                    parts.append(remaining.strip())
+                    break
+                cut = limit
+                window = remaining[:limit]
+                dot = window.rfind('.')
+                if dot != -1 and dot >= int(limit * 0.6):
+                    cut = dot + 1
+                piece = remaining[:cut].strip()
+                if not piece:
+                    piece = remaining[:limit]
+                    cut = limit
+                parts.append(piece)
+                start += cut
+            return [p for p in parts if p]
+
+        chunk_counts = [max(1, len(_smart_subchunks_ui(t, 200)))
+                        for t in speech_texts]
+        # Prefix sums to map completed speech count to completed sub-chunks
+        prefix = [0]
+        for c in chunk_counts:
+            prefix.append(prefix[-1] + c)
+        total_subchunks = prefix[-1]
+    except Exception:
+        chunk_counts = []
+        prefix = [0]
+        total_subchunks = 0
+        speech_texts = []
+
     def _cb(done: int, tot: int):
-        prog.progress(min(1.0, done / max(1, tot)))
-        info.text(f"Processed {done}/{tot} chunks")
+        # Map entry-based progress (includes pauses) to speech-only sub-chunk progress
+        if total_subchunks > 0 and speech_texts:
+            # Completed speech entries among the first `done` entries (speech+pause alternating)
+            speech_done = min(len(speech_texts), (done + 1) // 2)
+            sub_done = prefix[speech_done]
+            prog.progress(min(1.0, sub_done / max(1, total_subchunks)))
+            info.text(f"Processed {sub_done}/{total_subchunks} chunks")
+        else:
+            prog.progress(min(1.0, done / max(1, tot)))
+            info.text(f"Processed {done}/{tot} chunks")
 
     gen = ResumableBatchGenerator(project_name, max_workers=2)
     with st.spinner("Generating audio in chunks..."):

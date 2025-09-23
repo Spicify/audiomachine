@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -71,38 +73,86 @@ class ResumableBatchGenerator:
                 return data
         return ""
 
-    @retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=0.5, min=0.5, max=6), reraise=True)
     def _tts_chunk(self, text: str, voice_id: str) -> AudioSegment:
+        """Robust TTS for a single text chunk with timeout and fallback.
+
+        Policy:
+        - 40s timeout per attempt
+        - 1 immediate retry on failure
+        - If still failing, split text in half and try each half once, then concatenate
+        - On total failure, return short silence (never raise)
+        """
         if not text.strip():
             return AudioSegment.silent(duration=200)
-        stream = self.client.text_to_speech.convert(
-            voice_id=voice_id or self.default_voice_id,
-            text=text,
-            model_id=self.model_id,
-        )
-        buf = io.BytesIO()
-        for part in stream:
-            if part:
-                buf.write(part)
-        data = buf.getvalue()
-        if not data:
-            raise RuntimeError("Empty audio from ElevenLabs")
-        return AudioSegment.from_file(io.BytesIO(data), format="mp3")
+
+        def _try_once(t: str) -> Optional[AudioSegment]:
+            result: Dict[str, Optional[bytes]] = {"data": None}
+
+            def _worker():
+                try:
+                    stream = self.client.text_to_speech.convert(
+                        voice_id=voice_id or self.default_voice_id,
+                        text=t,
+                        model_id=self.model_id,
+                    )
+                    buf = io.BytesIO()
+                    for part in stream:
+                        if part:
+                            buf.write(part)
+                    result["data"] = buf.getvalue()
+                except Exception:
+                    result["data"] = None
+
+            th = threading.Thread(target=_worker, daemon=True)
+            th.start()
+            th.join(timeout=40.0)
+            if th.is_alive():
+                # timed out
+                return None
+            data = result.get("data")
+            if not data:
+                return None
+            try:
+                audio = AudioSegment.from_file(io.BytesIO(data), format="mp3")
+                # Treat extremely short audio as failure
+                if len(audio) < 200:
+                    return None
+                return audio
+            except Exception:
+                return None
+
+        # First attempt
+        seg = _try_once(text)
+        if seg is not None:
+            return seg
+
+        # Second attempt
+        seg = _try_once(text)
+        if seg is not None:
+            return seg
+
+        # Split into two halves and try once per half
+        mid = max(1, len(text) // 2)
+        left = text[:mid]
+        right = text[mid:]
+        left_seg = _try_once(left)
+        right_seg = _try_once(right)
+        if left_seg is None and right_seg is None:
+            return AudioSegment.silent(duration=300)
+        if left_seg is None:
+            left_seg = AudioSegment.silent(duration=100)
+        if right_seg is None:
+            right_seg = AudioSegment.silent(duration=100)
+        # Seamless concat (no extra pad, no crossfade)
+        return self._ensure(left_seg) + self._ensure(right_seg)
 
     def _post(self, seg: AudioSegment) -> AudioSegment:
+        """Deprecated per-objectives: keep compatibility but return as-is.
+        Final mastering is applied only once at the end.
+        """
         if not seg:
             return AudioSegment.silent(duration=200)
-        # Gentle dynamics, then align to target loudness
-        norm = effects.normalize(seg, headroom=1.0)
-        comp = effects.compress_dynamic_range(
-            norm, threshold=-18.0, ratio=2.0, attack=5.0, release=50.0)
-        try:
-            current = comp.dBFS
-            if current != float("-inf"):
-                comp = comp.apply_gain(self.TARGET_DBFS - current)
-        except Exception:
-            pass
-        return comp.fade_in(10).fade_out(30)
+        return seg
 
     def _ensure(self, seg: AudioSegment) -> AudioSegment:
         return seg.set_sample_width(2).set_channels(2).set_frame_rate(44100)
@@ -117,6 +167,47 @@ class ResumableBatchGenerator:
         if pad_after:
             merged = merged + AudioSegment.silent(duration=self.PAD_MS)
         return merged
+
+    def _smart_subchunks(self, text: str, limit: int = 200) -> List[str]:
+        """Split text smartly around sentence boundaries near the limit.
+
+        - Prefer splitting at '.' close to the limit going backwards
+        - If none found, hard split at limit
+        - Repeat until all text consumed
+        """
+        t = (text or "").strip()
+        if len(t) <= limit:
+            return [t]
+        parts: List[str] = []
+        start = 0
+        while start < len(t):
+            remaining = t[start:]
+            if len(remaining) <= limit:
+                parts.append(remaining)
+                break
+            # search backward from limit for a period
+            cut = limit
+            window = remaining[:limit]
+            dot = window.rfind('.')
+            if dot != -1 and dot >= int(limit * 0.6):
+                cut = dot + 1
+            piece = remaining[:cut].strip()
+            if not piece:
+                piece = remaining[:limit]
+                cut = limit
+            parts.append(piece)
+            start += cut
+        return parts
+
+    def _tts_for_text(self, text: str, voice_id: str) -> AudioSegment:
+        """Pre-chunk long text and synthesize sequentially; join seamlessly."""
+        subtexts = self._smart_subchunks(text, limit=200)
+        seg = AudioSegment.silent(duration=0)
+        for stx in subtexts:
+            part = self._tts_chunk(stx, voice_id)
+            # Seamless concatenation (no pad, no crossfade)
+            seg = self._ensure(seg) + self._ensure(part)
+        return seg
 
     def _finalize_consolidated(self, audio: AudioSegment) -> AudioSegment:
         if not audio:
@@ -243,9 +334,13 @@ class ResumableBatchGenerator:
         if not self.state.load():
             self.state.init_state(ids)
 
-        pending_ids = self.state.get_pending_chunks()
-        indices_to_process: List[int] = [
-            i for i, cid in enumerate(ids) if cid in pending_ids]
+        # Resumability via committed_index (avoid duplicates if previous upload completed)
+        try:
+            last_committed = int(self.state.state.get("committed_index", -1))
+        except Exception:
+            last_committed = -1
+        indices_to_process: List[int] = list(
+            range(last_committed + 1, len(sequence)))
 
         total = len(ids)
         completed = total - len(indices_to_process)
@@ -278,16 +373,19 @@ class ResumableBatchGenerator:
                     if not vid:
                         text_for_voice = f"[{entry.get('character','Narrator')}] {entry.get('text','')}"
                         vid = self._select_voice_for_text(text_for_voice)
+                    # Submit pre-chunking aware task
                     speech_futures[i] = pool.submit(
-                        self._tts_chunk, entry.get("text", ""), vid)
+                        self._tts_for_text, entry.get("text", ""), vid)
 
             # Sequentially merge in order for all pending entries
             for rel_idx, i in enumerate(indices_to_process):
                 entry = sequence[i]
                 seg: Optional[AudioSegment] = None
                 if entry.get("type") == "speech":
-                    seg = speech_futures[i].result()
-                    seg = self._post(seg)
+                    try:
+                        seg = speech_futures[i].result()
+                    except Exception:
+                        seg = AudioSegment.silent(duration=200)
                 # FX removed: ignore sound_effect entries if any remain
                 elif entry.get("type") == "sound_effect":
                     seg = AudioSegment.silent(duration=200)
@@ -304,8 +402,11 @@ class ResumableBatchGenerator:
                 consolidated = self._merge(
                     consolidated, seg, pad_after=pad_after)
 
-                self._upload_and_update(consolidated)
-                self.state.mark_chunk_done(ids[i])
+                # Mark chunk done early (before upload) for visibility; resumability is guarded by committed_index
+                try:
+                    self.state.mark_chunk_done(ids[i])
+                except Exception:
+                    pass
 
                 completed += 1
                 if progress_cb:
@@ -314,9 +415,30 @@ class ResumableBatchGenerator:
                     except Exception:
                         pass
 
+                # Batch upload every 3 processed chunks
+                if completed % 3 == 0 or (i == indices_to_process[-1]):
+                    try:
+                        self._upload_and_update(consolidated)
+                        # Update committed index to the last processed index
+                        self.state.state["committed_index"] = i
+                        self.state.save()
+                    except Exception:
+                        # Continue; next batch will attempt again
+                        pass
+
         # Final mastering and upload normalized audio
-        consolidated = self._finalize_consolidated(consolidated)
-        self._upload_and_update(consolidated)
-        self.state.set_status("COMPLETED")
-        self.state.set_latest_url(
-            s3_generate_presigned_url(self.audio_key, 3600))
+        try:
+            consolidated = self._finalize_consolidated(consolidated)
+        except Exception:
+            pass
+        try:
+            self._upload_and_update(consolidated)
+            # On final upload, commit to last sequence index
+            self.state.state["committed_index"] = len(sequence) - 1
+            self.state.set_status("COMPLETED")
+            self.state.set_latest_url(
+                s3_generate_presigned_url(self.audio_key, 3600))
+            self.state.save()
+        except Exception:
+            # Leave state as-is; history UI may still show partial
+            pass

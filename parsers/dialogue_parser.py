@@ -32,7 +32,7 @@ class DialogueParser:
             text_part = re.sub(
                 r'^\[([^\]]+)\]\s*(\([^)]+\))*\s*:', '', line).strip()
 
-            # Clean text (legacy FX markers removed if present)
+            # Clean text: ignore/remove any legacy FX markers if present
             clean_text = re.sub(r'\*[^*]+\*', '', text_part).strip()
 
             # Build emotion text
@@ -57,8 +57,6 @@ class DialogueParser:
                 "emotions": emotion_matches,
                 "original_text": clean_text
             })
-
-            # FX entries removed from pipeline
 
             # Add pause after each line (but not if it's the last line)
             # This ensures natural spacing between dialogue lines
