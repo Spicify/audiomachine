@@ -27,7 +27,13 @@ class ProjectStateManager:
             "last_updated": self._now_iso(),
             "chunks": [{"id": cid, "status": "PENDING"} for cid in chunk_ids],
             "latest_file_url": None,
+            "committed_index": -1,
         }
+        try:
+            print(
+                f"[state] init_state project_id={self.project_id} chunks={len(chunk_ids)} committed_index=-1", flush=True)
+        except Exception:
+            pass
         self.save()
 
     def save(self):

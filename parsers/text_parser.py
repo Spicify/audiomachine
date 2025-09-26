@@ -263,7 +263,11 @@ class TextParser:
                 if emotion not in self.emotion_tags:
                     unsupported_emotions.add(emotion)
 
-            # FX handling removed: ignore any legacy effect markers entirely
+            for effect in parsed.sound_effects:
+                sound_effects_found[effect] += 1
+                norm_effect = normalize_effect_name(effect)
+                if norm_effect not in self.sound_effects:
+                    unsupported_sound_effects.add(effect)
 
         return ParseAnalysis(
             characters_found=dict(characters_found),

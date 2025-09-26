@@ -6,12 +6,12 @@
     },
     "Professor": {
       "voice_id": "8S6ZMgJCL5LeTTGNzKye",
-      "gender": "M"
+      "gender": "M" 
     },
     "Dante": {
       "voice_id": "abFrD0U0thqiU9PxyaXb",
       "gender": "M"
-    },
+    }, 
     "Enzo": {
       "voice_id": "kM3yB77Ab8wxBqDgYTWt",
       "gender": "M"
@@ -26,7 +26,7 @@
     },
     "Declan": {
       "voice_id": "kqVT88a5QfII1HNAEPTJ",
-      "gender": "M"
+      "gender": "M" 
     },
     "Edward": {
       "voice_id": "goT3UYdM9bhm0n2lmKQx",
@@ -189,7 +189,7 @@
   },
   "📚 Narrators": {
     "Astro": {
-      "voice_id": "B5vjwBxGgp4GLTiUjDxM",
+      "voice_id": "B5vjwBxGgp4GLTiUjDxM", 
       "gender": "M"
     },
     "Soothing Narrator": {

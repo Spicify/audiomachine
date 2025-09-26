@@ -224,8 +224,7 @@ class DialogueAudioGenerator:
 
                 # FX entries removed from sequence; keep branch for safety
                 elif entry["type"] == "sound_effect":
-                    # FX removed: ignore and proceed with a short neutral gap
-                    batch_segments.append(AudioSegment.silent(duration=150))
+                    batch_segments.append(AudioSegment.silent(duration=300))
 
                 elif entry["type"] == "pause":
                     duration = entry.get("duration", 500)
