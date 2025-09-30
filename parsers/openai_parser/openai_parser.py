@@ -246,6 +246,37 @@ class OpenAIParser:
             else:
                 reconciled.append(item)
 
+        # --- Safeguard: re-inject missing input lines as Narrator (ambiguous) ---
+        try:
+            raw_lines: List[str] = [ln.strip()
+                                    for ln in (raw_text or "").split("\n")]
+            raw_lines = [ln for ln in raw_lines if ln]
+
+            def _norm(s: str) -> str:
+                return (s or "").strip().lower()
+
+            out_texts_lower: List[str] = [
+                _norm(d.get("text", "")) for d in reconciled]
+            missing_lines: List[str] = []
+            for ln in raw_lines:
+                ln_norm = _norm(ln)
+                if not any(ln_norm in t for t in out_texts_lower):
+                    missing_lines.append(ln)
+
+            for m in missing_lines:
+                reconciled.append({
+                    "character": "Narrator",
+                    "emotions": ["neutral", "calm"],
+                    "text": m,
+                    "id": f"reinjected-{abs(hash(m))}",
+                })
+            if missing_lines:
+                warnings.append(
+                    f"Re-injected {len(missing_lines)} missing line(s) as Narrator.")
+        except Exception:
+            # Never fail the main flow due to safeguard
+            pass
+
         formatted_lines: List[str] = []
         for d in reconciled:
             em_text = "".join([f"({e})" for e in d.get("emotions", [])])
@@ -356,6 +387,34 @@ class OpenAIParser:
                         continue
                     seen_keys.add(key)
                     filtered.append(it)
+
+                # --- Streaming safeguard: re-inject missing sentences from this chunk as Narrator ---
+                try:
+                    import re as _re
+                    exp_sentences: List[str] = []
+                    for sent in _re.split(r"(?<=[.!?])\s+", (ch.text or "").strip()):
+                        s = (sent or "").strip()
+                        if s:
+                            exp_sentences.append(s)
+
+                    def _norm(s: str) -> str:
+                        return (s or "").strip().lower()
+                    present = {_norm(d.get("text", "")) for d in filtered}
+                    reinjected = 0
+                    for s in exp_sentences:
+                        if _norm(s) not in present:
+                            filtered.append({
+                                "character": "Narrator",
+                                "emotions": ["neutral", "calm"],
+                                "text": s,
+                                "id": f"reinjected-{abs(hash(s))}",
+                            })
+                            reinjected += 1
+                    if reinjected:
+                        warnings.append(
+                            f"Streaming: re-injected {reinjected} missing sentence(s) as Narrator.")
+                except Exception:
+                    pass
                 print(
                     f">>> Yielding chunk {idx+1}/{total}: dialogues={len(filtered)}, ambiguities={len(chunk_ambs)}", flush=True)
                 # record per-chunk duration and token count
