@@ -447,23 +447,12 @@ class OpenAIParser:
 
     def finalize_stream(self, dialogues: List[Dict[str, Any]], include_narration: Optional[bool] = None) -> RawParseResult:
         inc = self.include_narration if include_narration is None else include_narration
-        # Reconcile adjacent same-speaker lines
+        # Preserve each dialogue line exactly as provided (no merging). Only apply narrator inclusion filter.
         reconciled: List[Dict[str, Any]] = []
         for item in dialogues:
             if not inc and str(item.get("character")).strip() == "Narrator":
                 continue
-            if reconciled and reconciled[-1]["character"] == item["character"]:
-                reconciled[-1]["text"] = f"{reconciled[-1]['text']} {item['text']}".strip()
-                merged_emotions = list(dict.fromkeys(
-                    reconciled[-1]["emotions"] + item["emotions"]))
-                if len(merged_emotions) >= 2:
-                    merged_emotions = merged_emotions[:2]
-                else:
-                    merged_emotions = ensure_two_emotions(
-                        item["character"], merged_emotions, reconciled[-1]["text"], self.kb, self.allowed_emotions, self.memory)
-                reconciled[-1]["emotions"] = merged_emotions
-            else:
-                reconciled.append(item)
+            reconciled.append(item)
 
         formatted_lines: List[str] = []
         for d in reconciled:
