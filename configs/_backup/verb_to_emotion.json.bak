@@ -36,10 +36,10 @@
   "pleaded": "pleading",
   "begged": "begging",
   "implored": "pleading",
-  "laughed": "laughs",
-  "chuckled": "giggles",
-  "giggled": "giggles",
-  "snorted": "snorts",
+  "laughed": "laughing",
+  "chuckled": "laughing",
+  "giggled": "laughing",
+  "snorted": "laughing",
   "teased": "teasing",
   "taunted": "teasing",
   "cooed": "romantic",
@@ -48,3 +48,5 @@
   "whisper-moaned": "moaning",
   "whimper-moaned": "moaning"
 }
+{}
+

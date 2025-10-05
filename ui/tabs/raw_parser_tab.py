@@ -169,8 +169,20 @@ def create_raw_parser_tab(get_known_characters_callable):
         t.start()
 
         with st.spinner("Generating..."):
+            # Persistent container for per-chunk messages below spinner
+            chunk_status_container = st.container()
+            parsing_msg = chunk_status_container.empty()
+            progress_msg = chunk_status_container.empty()
+            fallback_msg = chunk_status_container.empty()
+            finalize_msg = chunk_status_container.empty()
             expected = len(token_counts) or 1
             for idx in range(1, expected + 1):
+                # Announce start of chunk (before waiting for results)
+                try:
+                    parsing_msg.write(f"📦 Parsing chunk {idx}/{expected} …")
+                    time.sleep(3)
+                except Exception:
+                    pass
                 # Determine target percent for this chunk using token-based fraction
                 target_percent = cumulative_targets[idx - 1] if (idx - 1) < len(
                     cumulative_targets) else int(idx * 100 / max(1, expected))
@@ -231,6 +243,13 @@ def create_raw_parser_tab(get_known_characters_callable):
                 # Process the chunk data now
                 ch = chunks_by_idx.get(idx)
                 if ch:
+                    # Ordered per-chunk messages
+                    try:
+                        progress_msg.write("✅ OpenAI done")
+                        time.sleep(3)
+                        progress_msg.write("🔍 Checking coverage …")
+                    except Exception:
+                        pass
                     st.session_state["stream_chunks"].append({
                         "index": idx,
                         "dialogues": list(ch.get("dialogues") or []),
@@ -246,6 +265,29 @@ def create_raw_parser_tab(get_known_characters_callable):
                         "idx": idx, "total": expected}
                     print(
                         f"[raw_parser_tab] progress {idx}/{expected} → {current_percent}%")
+                    # Ordered per-chunk messages
+                    try:
+                        warns = list(ch.get("warnings") or [])
+                        compact = next((w for w in warns if str(
+                            w).startswith("fallback_used:")), None)
+                        if compact:
+                            fallback_msg.warning(f"⚠️ {compact}")
+                            time.sleep(3)
+                            fallback_msg.success("✅ Fallback complete")
+                        dlines = len(ch.get("dialogues") or [])
+                        finalize_msg.success(
+                            f"🎯 Chunk finalized ({dlines} lines)")
+                    except Exception:
+                        pass
+
+                    # Clear placeholders for next chunk (only after full completion)
+                    try:
+                        parsing_msg.empty()
+                        progress_msg.empty()
+                        fallback_msg.empty()
+                        finalize_msg.empty()
+                    except Exception:
+                        pass
 
         # Fill to 100%
         for p in range(current_percent + 1, 101):

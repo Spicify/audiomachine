@@ -13,6 +13,9 @@ except Exception:  # Fallback if not installed yet
 
 _SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
+# [DIAG] collect cross-speaker duplicate conflicts (normalized_text, speakerA, speakerB)
+_DIAG_DEDUP_CONFLICTS: List[Tuple[str, str, str]] = []
+
 
 def _split_into_sentences(text: str) -> List[str]:
     parts = _SENT_SPLIT_RE.split(text.strip())
@@ -127,17 +130,83 @@ def build_chunks(
 
 
 def deduplicate_lines(lines: List[dict]) -> List[dict]:
-    """Deduplicate JSONL output lines based on (character, text) hash.
+    """Deduplicate JSONL output lines.
 
-    Used after overlapping chunk inference to remove repeated lines.
+    Primary: exact (character|text) hash.
+    Secondary: cross-character normalized text match → prefer non-Narrator.
     """
+    def _norm_text(s: str) -> str:
+        s = (s or "").strip().lower()
+        # strip quotes and collapse whitespace
+        import re as _re
+        s = s.strip('"\'“”‘’')
+        s = _re.sub(r"\s+", " ", s)
+        return s
+
     seen = set()
     result: List[dict] = []
+    norm_to_index: dict[str, int] = {}
+
     for it in lines:
         key = _hash_text(
             f"{(it.get('character') or '').strip().lower()}|{(it.get('text') or '').strip()}")
         if key in seen:
             continue
+        txt_norm = _norm_text(it.get("text", ""))
+        if txt_norm:
+            if txt_norm in norm_to_index:
+                # prefer non-Narrator version
+                existing_idx = norm_to_index[txt_norm]
+                existing = result[existing_idx]
+                cur_is_narr = str(it.get("character", "")
+                                  ).strip() == "Narrator"
+                exist_is_narr = str(existing.get(
+                    "character", "")).strip() == "Narrator"
+                if exist_is_narr and not cur_is_narr:
+                    # replace existing narrator with character version
+                    result[existing_idx] = it
+                    seen.add(key)
+                    continue
+                # else, drop current narrator duplicate
+                if cur_is_narr:
+                    continue
+                # [DIAG] conflict: same normalized text with two non-narrator speakers
+                try:
+                    if not cur_is_narr and not exist_is_narr:
+                        _a = str(existing.get("character", ""))
+                        _b = str(it.get("character", ""))
+                        print(
+                            f"[DIAG] Cross-speaker duplicate conflict: '{txt_norm[:80]}' speakers=({_a} vs {_b})", flush=True)
+                        try:
+                            _DIAG_DEDUP_CONFLICTS.append((txt_norm, _a, _b))
+                        except Exception:
+                            pass
+                        # Preference rule: prefer non-'Ambiguous' over 'Ambiguous'
+                        if _a == "Ambiguous" and _b != "Ambiguous":
+                            result[existing_idx] = it
+                            continue
+                        if _b == "Ambiguous" and _a != "Ambiguous":
+                            # keep existing
+                            continue
+                        # If both named but different, keep existing (first wins) and drop current
+                        # (we could enhance with last_speaker if passed here)
+                        continue
+                except Exception:
+                    pass
         seen.add(key)
         result.append(it)
+        if txt_norm and txt_norm not in norm_to_index:
+            norm_to_index[txt_norm] = len(result) - 1
     return result
+
+
+def diag_consume_dedup_conflicts(max_items: int | None = None) -> List[Tuple[str, str, str]]:
+    """Return and clear collected dedup conflicts for DIAG summaries."""
+    try:
+        out = list(_DIAG_DEDUP_CONFLICTS)
+        _DIAG_DEDUP_CONFLICTS.clear()
+        if max_items is not None:
+            return out[:max_items]
+        return out
+    except Exception:
+        return []

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from collections import defaultdict, deque
 from typing import Deque, Dict, List, Optional, Set, Tuple
@@ -8,10 +9,25 @@ from config_loader import EMOTION_TAGS, SPEECH_VERBS, VERB_TO_EMOTION, ADVERB_TO
 
 
 def get_allowed_emotions() -> Set[str]:
+    """Build the allowed emotion tag set used in the system prompt.
+
+    Diagnosis notes:
+    - ONLY keys from EMOTION_TAGS (configs/emotion_tags.json) are aggregated here.
+    - VERB_TO_EMOTION and ADVERB_TO_EMOTION are used later for normalization/derivation
+      and are constrained to this allowed set.
+    - SPEECH_VERBS is not included in the prompt and does not expand ALLOWED_EMOTIONS.
+    """
     allowed: Set[str] = set()
     for cat in EMOTION_TAGS.values():
         for tag in cat.keys():
             allowed.add(tag.strip().lower())
+    # Optional debug: print size of allowed set when DEBUG_EMOTIONS=1 is set.
+    try:
+        if os.getenv("DEBUG_EMOTIONS") == "1":
+            print("ALLOWED_EMOTIONS size:", len(allowed))
+    except Exception:
+        # Never fail due to diagnostics
+        pass
     return allowed
 
 

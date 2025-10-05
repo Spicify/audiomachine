@@ -11,3 +11,78 @@
 143.98 (988), 188.34 (997), 123.97 (992), 109.16 (981)
 168.12 (990), 47.84 (327)
 113.23 (683)
+180.95 (988), 55.34 (215)
+chunk=1 streaming_fallback_used=False problem_segments=10
+44.23 (126)
+chunk=1 streaming_fallback_used=False problem_segments=2
+68.67 (126)
+chunk=1 streaming_fallback_used=False problem_segments=10
+40.19 (126)
+chunk=1 streaming_fallback_used=False problem_segments=1
+53.95 (73)
+chunk=1 streaming_fallback_used=False problem_segments=8
+59.95 (263)
+chunk=1 streaming_fallback_used=False problem_segments=22
+43.52 (266)
+chunk=1 streaming_fallback_used=False problem_segments=23
+48.64 (296)
+97.22 (126)
+70.50 (293)
+57.17 (126)
+58.25 (126)
+56.95 (293)
+
+
+chunk=1 streaming_fallback_used=False problem_segments=4
+19.75 (61)
+chunk=1 streaming_fallback_used=False problem_segments=4
+18.61 (61)
+181.48 (1499), 211.30 (1494), 109.77 (784)
+chunk=1 streaming_fallback_used=False problem_segments=4
+37.97 (61)
+chunk=1 streaming_fallback_used=False problem_segments=4
+14.48 (61)
+chunk=1 streaming_fallback_used=False problem_segments=4
+20.69 (61)
+chunk=1 streaming_fallback_used=False problem_segments=4
+27.14 (61)
+chunk=1 streaming_fallback_used=False problem_segments=4
+24.19 (61)
+chunk=1 streaming_fallback_used=False problem_segments=4
+32.23 (61)
+chunk=1 streaming_fallback_used=False problem_segments=4
+38.16 (61)
+chunk=1 streaming_fallback_used=False problem_segments=4
+41.09 (61)
+chunk=1 streaming_fallback_used=False problem_segments=4
+24.61 (61)
+21.27 (61)
+23.48 (61)
+19.53 (61)
+66.30 (246)
+32.70 (61)
+19.22 (61)
+78.45 (246)
+35.25 (61)
+121.03 (308)
+25.56 (36)
+43.62 (37)
+37.56 (24)
+47.31 (45)
+16.97 (16)
+59.91 (308)
+28.64 (36)
+54.09 (37)
+52.30 (24)
+43.98 (45)
+53.44 (45)
+27.20 (16)
+51.58 (24)
+123.45 (308)
+91.52 (307)
+100.61 (308)
+46.34 (92)
+45.70 (75)
+44.51 (75)
+58.00 (75)
+38.97 (75)
