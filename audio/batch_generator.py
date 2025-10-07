@@ -6,6 +6,9 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
+import os
+import datetime
+import psutil
 
 from elevenlabs import ElevenLabs
 from pydub import AudioSegment, effects
@@ -456,6 +459,29 @@ class ResumableBatchGenerator:
         sequence = self._build_sequence(full_text)
         if not sequence:
             return
+        # --- Heartbeat: keep UI alive during long waits ---
+        stop_hb = threading.Event()
+        # --- Log buffer for diagnostics ---
+        try:
+            import io as _io
+            self._log_buffer = _io.StringIO()
+            self._log_timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        except Exception:
+            self._log_buffer = None
+            self._log_timestamp = None
+
+        def _start_heartbeat(cb, stop_event):
+            def _loop():
+                while not stop_event.is_set():
+                    time.sleep(30)
+                    try:
+                        if cb:
+                            cb(-1, -1)
+                    except Exception:
+                        pass
+            threading.Thread(target=_loop, daemon=True).start()
+
+        _start_heartbeat(progress_cb, stop_hb)
         # Build deterministic IDs per entry to track progress
         ids: List[str] = [
             f"{self.project_id}_chunk{str(i+1).zfill(3)}" for i in range(len(sequence))]
@@ -545,6 +571,21 @@ class ResumableBatchGenerator:
             for rel_idx, i in enumerate(indices_to_process):
                 entry = sequence[i]
                 seg: Optional[AudioSegment] = None
+                # periodic diagnostics (every 5th item)
+                try:
+                    if (i % 5) == 0:
+                        rss = psutil.Process(
+                            os.getpid()).memory_info().rss / 1e6
+                        now = datetime.datetime.now().strftime("%H:%M:%S")
+                        _msg = f"[DIAG] {now} – mem {rss:.1f} MB – phase: TTS wait {i+1}/{total}"
+                        print(_msg, flush=True)
+                        try:
+                            if getattr(self, "_log_buffer", None):
+                                self._log_buffer.write(_msg + "\n")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
                 if entry.get("type") == "speech":
                     try:
                         print(
@@ -575,6 +616,19 @@ class ResumableBatchGenerator:
                 next_is_pause = (i + 1 < len(sequence)
                                  and sequence[i + 1].get("type") == "pause")
                 pad_after = (not next_is_pause) and (i < len(sequence) - 1)
+                try:
+                    rss = psutil.Process(os.getpid()).memory_info().rss / 1e6
+                    now = datetime.datetime.now().strftime("%H:%M:%S")
+                    if (i % 5) == 0:
+                        _msg = f"[DIAG] {now} – mem {rss:.1f} MB – phase: merge {i+1}/{total}"
+                        print(_msg, flush=True)
+                        try:
+                            if getattr(self, "_log_buffer", None):
+                                self._log_buffer.write(_msg + "\n")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
                 consolidated = self._merge(
                     consolidated, seg, pad_after=pad_after)
                 print(
@@ -599,6 +653,19 @@ class ResumableBatchGenerator:
                 # Batch upload every 5 processed chunks
                 if completed % 5 == 0 or (i == indices_to_process[-1]):
                     try:
+                        try:
+                            rss = psutil.Process(
+                                os.getpid()).memory_info().rss / 1e6
+                            now = datetime.datetime.now().strftime("%H:%M:%S")
+                            _msg = f"[DIAG] {now} – mem {rss:.1f} MB – phase: upload start idx={i}"
+                            print(_msg, flush=True)
+                            try:
+                                if getattr(self, "_log_buffer", None):
+                                    self._log_buffer.write(_msg + "\n")
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
                         print(
                             f"[upload] batch upload idx={i} completed={completed} total={total} len_ms={len(consolidated)} key={self.audio_key}", flush=True)
                         self._upload_and_update(consolidated, i)
@@ -620,6 +687,18 @@ class ResumableBatchGenerator:
         try:
             print(
                 f"[upload] final upload entries={len(sequence)} len_ms={len(consolidated)} key={self.audio_key}", flush=True)
+            try:
+                rss = psutil.Process(os.getpid()).memory_info().rss / 1e6
+                now = datetime.datetime.now().strftime("%H:%M:%S")
+                _msg = f"[DIAG] {now} – mem {rss:.1f} MB – phase: final upload"
+                print(_msg, flush=True)
+                try:
+                    if getattr(self, "_log_buffer", None):
+                        self._log_buffer.write(_msg + "\n")
+                except Exception:
+                    pass
+            except Exception:
+                pass
             self._upload_and_update(consolidated, len(sequence) - 1)
             print(
                 f"[state] committed_index updated -> {len(sequence) - 1}", flush=True)
@@ -633,3 +712,29 @@ class ResumableBatchGenerator:
                 f"[upload] final upload error: {type(e).__name__}: {e}", flush=True)
             # Leave state as-is; history UI may still show partial
             pass
+        finally:
+            # stop heartbeat on exit
+            try:
+                stop_hb.set()
+            except Exception:
+                pass
+            # Upload log buffer to S3 and prune to latest 10
+            try:
+                if getattr(self, "_log_buffer", None) and getattr(self, "_log_timestamp", None):
+                    from utils.s3_utils import s3_upload_bytes, s3_list_objects, s3_delete_object
+                    log_key = f"projects/{self.project_id}/logs/debug_{self._log_timestamp}.log"
+                    data = self._log_buffer.getvalue().encode("utf-8", "ignore")
+                    s3_upload_bytes(log_key, data, content_type="text/plain")
+                    s3_upload_bytes(
+                        f"projects/{self.project_id}/logs/latest.log", data, content_type="text/plain")
+                    keys = s3_list_objects(
+                        prefix=f"projects/{self.project_id}/logs/")
+                    log_keys = sorted(
+                        [k for k in keys if k.endswith('.log')], reverse=True)
+                    for old in log_keys[10:]:
+                        try:
+                            s3_delete_object(old)
+                        except Exception:
+                            pass
+            except Exception:
+                pass

@@ -326,6 +326,7 @@ def create_main_generator_content():
 
 def _run_resumable_generation(full_text: str, project_name: str):
     import streamlit as st
+    import datetime
     st.markdown("### 🎬 Generate Audio (Resumable)")
     tasks = chunk_text(project_name, full_text, max_chars=2000)
     total = len(tasks)
@@ -336,12 +337,20 @@ def _run_resumable_generation(full_text: str, project_name: str):
     info = st.empty()
 
     def _cb(done: int, tot: int):
-        prog.progress(min(1.0, done / max(1, tot)))
-        info.text(f"Processed {done}/{tot} chunks")
+        if done >= 0 and tot > 0:
+            prog.progress(min(1.0, done / max(1, tot)))
+            info.text(f"Processed {done}/{tot} chunks")
+        else:
+            info.text("⏳ Working… (heartbeat)")
 
     gen = ResumableBatchGenerator(project_name, max_workers=2)
     with st.spinner("Generating audio in chunks..."):
         gen.run(full_text, progress_cb=_cb)
+    # Final diagnostic timestamp
+    try:
+        print("[DIAG] Generation complete at", datetime.datetime.now())
+    except Exception:
+        pass
     # Success UI: show player and download for consolidated S3 file
     audio_key = f"projects/{project_name}/consolidated.mp3"
     url = s3_generate_presigned_url(audio_key, expires_seconds=3600)
