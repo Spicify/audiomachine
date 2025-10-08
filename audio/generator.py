@@ -10,6 +10,8 @@ import time
 from datetime import datetime
 from pydub import AudioSegment, effects
 from audio.utils import get_flat_character_voices
+from utils.voice_settings import normalize_settings
+from utils.state_manager import load_project_voice_settings
 from utils.downloads import create_output_folders
 
 
@@ -22,6 +24,7 @@ class DialogueAudioGenerator:
         self.character_voices = get_flat_character_voices()
         # FX removed
         self.output_folders = create_output_folders()
+        self._voice_settings = None  # lazy-init per project
 
     def apply_post_processing(self, audio: AudioSegment) -> AudioSegment:
         """Apply mastering chain: normalization, compression, fades, EQ/gain matching"""
@@ -54,7 +57,7 @@ class DialogueAudioGenerator:
             st.warning(f"Post-processing error: {e}")
             return audio
 
-    def generate_speech(self, voice_id, text, model_id="eleven_v3"):
+    def generate_speech(self, voice_id, text, model_id="eleven_v3", voice_settings=None):
         """Generate TTS audio and return as AudioSegment"""
         try:
             # Ensure text is not empty
@@ -66,11 +69,28 @@ class DialogueAudioGenerator:
                 voice_id = voice_id.get("voice_id") or voice_id.get(
                     "id") or voice_id.get("voiceId")
 
+            # Merge effective voice settings (if provided)
+            vs = voice_settings or {}
             audio_generator = self.client.text_to_speech.convert(
                 voice_id=voice_id,
                 text=text,
-                model_id=model_id,
+                model_id="eleven_v3",
+                voice_settings={
+                    "stability": vs.get("stability", 0.35),
+                    "similarity_boost": vs.get("similarity_boost", 0.85),
+                    "style": vs.get("style", 0.50),
+                    "use_speaker_boost": bool(vs.get("use_speaker_boost", True)),
+                },
             )
+            try:
+                import os
+                if os.getenv("ELEVENLABS_DEBUG_REQUESTS") == "1":
+                    print(
+                        f"[EMO][REQ] model=eleven_v3 st={vs.get('stability', 0.35):.2f} sim={vs.get('similarity_boost', 0.85):.2f} style={vs.get('style', 0.50):.2f} boost={bool(vs.get('use_speaker_boost', True))}",
+                        flush=True,
+                    )
+            except Exception:
+                pass
 
             # Create a filesystem-safe filename component for voice id
             safe_voice = re.sub(r"[^a-zA-Z0-9_-]", "", str(voice_id))
@@ -146,6 +166,13 @@ class DialogueAudioGenerator:
 
         progress_callback (optional): callable accepting (completed_batches, total_batches)
         """
+        # Load per-project voice settings once
+        try:
+            self._voice_settings = normalize_settings(
+                load_project_voice_settings(project_name)
+            )
+        except Exception:
+            self._voice_settings = None
         # Use custom voice assignments if provided
         if voice_assignments:
             working_voices = voice_assignments.copy()
@@ -207,7 +234,8 @@ class DialogueAudioGenerator:
                             audio = self.generate_speech(
                                 voice_id=voice_id,
                                 text=entry["text"],
-                                model_id=entry.get("model_id", "eleven_v3"),
+                                model_id="eleven_v3",
+                                voice_settings=self._voice_settings or {},
                             )
                             if len(audio) > 0:
                                 break

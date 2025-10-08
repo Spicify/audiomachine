@@ -10,6 +10,7 @@ from ui.analysis import display_analysis_results, create_voice_management_interf
 from ui.tabs.teaser_tab import create_teaser_generator_tab
 from ui.tabs.emotion_preview_tab import create_emotion_preview_tab
 from ui.tabs.voice_manager_tab import create_voice_manager_tab
+from ui.tabs.settings_tab import render as render_settings_tab
 from ui.tabs.raw_parser_tab import create_raw_parser_tab
 from ui.history import create_history_tab
 from utils.chunking import chunk_text
@@ -139,22 +140,7 @@ def create_main_generator_content():
             with col4:
                 st.metric("Sound Effects", len(analysis.sound_effects_found))
 
-            # Show issues if any
-            total_issues = (len(analysis.unsupported_characters) +
-                            len(analysis.unsupported_emotions) +
-                            len(analysis.unsupported_sound_effects))
-
-            if total_issues > 0:
-                with st.expander("⚠️ Issues to Review", expanded=False):
-                    if analysis.unsupported_characters:
-                        st.error(
-                            f"**Unsupported Characters:** {', '.join(analysis.unsupported_characters)}")
-                    if analysis.unsupported_emotions:
-                        st.warning(
-                            f"**Unsupported Emotions:** {', '.join(analysis.unsupported_emotions)}")
-                    if analysis.unsupported_sound_effects:
-                        st.warning(
-                            f"**Unsupported Sound Effects:** {', '.join(analysis.unsupported_sound_effects)}")
+            # (Removed secondary "Detected Elements" expander)
 
         if st.button("🎬 Generate Audio", type="primary", use_container_width=True, key="paste_generate_btn"):
             if not project_name.strip():
@@ -284,22 +270,7 @@ def create_main_generator_content():
             with col4:
                 st.metric("Sound Effects", len(analysis.sound_effects_found))
 
-            # Show issues if any
-            total_issues = (len(analysis.unsupported_characters) +
-                            len(analysis.unsupported_emotions) +
-                            len(analysis.unsupported_sound_effects))
-
-            if total_issues > 0:
-                with st.expander("⚠️ Issues to Review", expanded=False):
-                    if analysis.unsupported_characters:
-                        st.error(
-                            f"**Unsupported Characters:** {', '.join(analysis.unsupported_characters)}")
-                    if analysis.unsupported_emotions:
-                        st.warning(
-                            f"**Unsupported Emotions:** {', '.join(analysis.unsupported_emotions)}")
-                    if analysis.unsupported_sound_effects:
-                        st.warning(
-                            f"**Unsupported Sound Effects:** {', '.join(analysis.unsupported_sound_effects)}")
+            # (Removed secondary "Detected Elements" expander)
         else:
             # Show zero metrics when not analyzed
             col1, col2, col3, col4 = st.columns(4)
@@ -432,6 +403,13 @@ def main():
 
     # Create enhanced sidebar with navigation
     create_navigation_sidebar()
+    try:
+        import os
+        if os.getenv("ELEVENLABS_DEBUG_REQUESTS") == "1":
+            print(
+                "[INFO] ElevenLabs model set to eleven_v3; API mode: Text-to-Speech (convert)", flush=True)
+    except Exception:
+        pass
 
     # Main content area - route based on current tab
     current_tab = st.session_state.get('current_tab', 'main')
@@ -459,6 +437,11 @@ def main():
 
     elif current_tab == "history":
         create_history_tab()
+    elif current_tab == "settings":
+        # Use current project name if available
+        proj = st.session_state.get('main_project_name') or st.session_state.get(
+            'upload_project_name') or "default"
+        render_settings_tab(proj)
 
     # Footer
     st.markdown("---")

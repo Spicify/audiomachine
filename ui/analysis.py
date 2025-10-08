@@ -19,9 +19,9 @@ def display_analysis_results(analysis: ParseAnalysis):
 
     with col3:
         st.metric("🔊 Sound Effects", 0)
+        # Only count non-emotion issues
         st.metric("⚠️ Issues Found",
-                  len(analysis.unsupported_characters) +
-                  len(analysis.unsupported_emotions))
+                  len(analysis.unsupported_characters))
 
     # Detailed breakdowns
     col1, col2 = st.columns(2)
@@ -34,31 +34,24 @@ def display_analysis_results(analysis: ParseAnalysis):
                 st.markdown(f"{status} **{char}**: {count} lines")
 
         if analysis.emotions_found:
-            st.markdown("### 😊 Emotions Usage")
-            emotion_tags = get_flat_emotion_tags()
+            st.markdown("### 😊 Emotions Used")
+            # Neutral display; all emotions are accepted
             for emotion, count in sorted(analysis.emotions_found.items(), key=lambda x: x[1], reverse=True):
-                status = "✅" if emotion in emotion_tags else "❌"
-                st.markdown(f"{status} **{emotion}**: {count} times")
+                st.markdown(f"✅ **{emotion}**: {count} times")
 
     with col2:
         # FX usage removed
         pass
 
     # Issues section
-    if (analysis.unsupported_characters or
-            analysis.unsupported_emotions):
+    # Issues: exclude emotions; only show real parsing issues like unknown characters
+    if analysis.unsupported_characters:
 
         st.markdown("### ⚠️ Issues Found")
 
-        if analysis.unsupported_characters:
-            st.error("**Unsupported Characters:**")
-            for char in analysis.unsupported_characters:
-                st.markdown(f"❌ {char}")
-
-        if analysis.unsupported_emotions:
-            st.warning("**Unsupported Emotions:**")
-            for emotion in analysis.unsupported_emotions:
-                st.markdown(f"⚠️ {emotion}")
+        st.error("**Unsupported Characters:**")
+        for char in analysis.unsupported_characters:
+            st.markdown(f"❌ {char}")
 
         # FX unsupported removed
 

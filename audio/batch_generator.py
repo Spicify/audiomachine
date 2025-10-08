@@ -16,10 +16,11 @@ from pydub.silence import detect_nonsilent
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from utils.chunking import chunk_text
-from utils.state_manager import ProjectStateManager
+from utils.state_manager import ProjectStateManager, load_project_voice_settings
 from utils.s3_utils import s3_upload_bytes, s3_generate_presigned_url, s3_get_bytes
 from utils.s3_utils import get_s3_client, get_bucket_defaults
 from audio.utils import get_flat_character_voices
+from utils.voice_settings import normalize_settings
 from parsers.dialogue_parser import DialogueParser
 from audio.generator import DialogueAudioGenerator
 
@@ -46,6 +47,13 @@ class ResumableBatchGenerator:
         self.TARGET_DBFS = -16.0
         self.PAD_MS = 250
         self.CROSSFADE_MS = 100
+        # Load and cache per-project voice settings
+        try:
+            self._voice_settings = normalize_settings(
+                load_project_voice_settings(self.project_id)
+            )
+        except Exception:
+            self._voice_settings = None
 
     def _load_voice_map(self) -> Dict[str, Dict[str, str]]:
         # Returns mapping character name (case sensitive keys) -> {voice_id, gender}
@@ -96,11 +104,27 @@ class ResumableBatchGenerator:
                 try:
                     print(
                         f"[TTS] start voice_id={(voice_id or self.default_voice_id)!r} model_id={self.model_id} len={len(t)} preview={t[:80]!r}", flush=True)
+                    vs = self._voice_settings or {}
                     stream = self.client.text_to_speech.convert(
                         voice_id=voice_id or self.default_voice_id,
                         text=t,
-                        model_id=self.model_id,
+                        model_id="eleven_v3",
+                        voice_settings={
+                            "stability": vs.get("stability", 0.35),
+                            "similarity_boost": vs.get("similarity_boost", 0.85),
+                            "style": vs.get("style", 0.50),
+                            "use_speaker_boost": bool(vs.get("use_speaker_boost", True)),
+                        },
                     )
+                    try:
+                        import os
+                        if os.getenv("ELEVENLABS_DEBUG_REQUESTS") == "1":
+                            print(
+                                f"[EMO][REQ] model=eleven_v3 st={vs.get('stability', 0.35):.2f} sim={vs.get('similarity_boost', 0.85):.2f} style={vs.get('style', 0.50):.2f} boost={bool(vs.get('use_speaker_boost', True))}",
+                                flush=True,
+                            )
+                    except Exception:
+                        pass
                     buf = io.BytesIO()
                     total_parts = 0
                     total_bytes = 0

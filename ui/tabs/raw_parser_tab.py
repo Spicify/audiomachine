@@ -1,4 +1,5 @@
 import streamlit as st
+import uuid
 from parsers.openai_parser.openai_parser import OpenAIParser
 from parsers.openai_parser.chunker import build_chunks
 from queue import Queue, Empty
@@ -85,6 +86,13 @@ def create_raw_parser_tab(get_known_characters_callable):
             st.error("Please paste some raw prose first.")
         else:
             # Mark parsing phase and reset buffers for a fresh run
+            # Cleanup any stale ambiguity widget keys before rebuilding
+            try:
+                for _k in list(st.session_state.keys()):
+                    if isinstance(_k, str) and (_k.startswith("amb_sel_") or _k.startswith("amb_new_")):
+                        del st.session_state[_k]
+            except Exception:
+                pass
             st.session_state["parsing_in_progress"] = True
             st.session_state["stream_dialogues"] = []
             st.session_state["stream_lines"] = []
@@ -250,8 +258,11 @@ def create_raw_parser_tab(get_known_characters_callable):
                         progress_msg.write("🔍 Checking coverage …")
                     except Exception:
                         pass
+                    # Assign a stable per-chunk UUID (first time only)
+                    ch_uuid = ch.get("uuid") or uuid.uuid4().hex[:8]
                     st.session_state["stream_chunks"].append({
                         "index": idx,
+                        "uuid": ch_uuid,
                         "dialogues": list(ch.get("dialogues") or []),
                         "ambiguities": list(ch.get("ambiguities") or []),
                     })
@@ -368,11 +379,12 @@ def create_raw_parser_tab(get_known_characters_callable):
                                         current_value) if current_value in options else 0
                                 except Exception:
                                     idx = 0
+                                chunk_uuid = ch.get("uuid") or "noid"
                                 selection = st.selectbox(
                                     label,
                                     options=options if options else [""],
                                     index=idx if options else 0,
-                                    key=f"amb_sel_{i}_{amb_id}",
+                                    key=f"amb_sel_{chunk_uuid}_{amb_id}",
                                     help="ℹ️ All Ambiguities will be updated once parsing is complete."
                                 )
 
@@ -381,7 +393,7 @@ def create_raw_parser_tab(get_known_characters_callable):
                                     new_val = st.text_input(
                                         "Enter new character name:",
                                         value=(custom_name or ""),
-                                        key=f"amb_new_{i}_{amb_id}"
+                                        key=f"amb_new_{chunk_uuid}_{amb_id}"
                                     ).strip()
                                     if new_val:
                                         st.session_state["ambiguity_custom"][amb_id] = new_val

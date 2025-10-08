@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from utils.s3_utils import s3_read_json, s3_write_json, s3_generate_presigned_url
+import json
 
 
 class ProjectStateManager:
@@ -54,6 +55,34 @@ class ProjectStateManager:
     def set_status(self, status: str):
         self.state["status"] = status
         self.save()
+
+
+# --- Per-project voice settings helpers ---
+def _project_settings_key(project_name: str, filename: str) -> str:
+    # Keep path scheme aligned with existing artifacts (do not change audio/state keys)
+    # Store alongside other project metadata under projects/{project}/
+    safe = project_name
+    return f"projects/{safe}/{filename}"
+
+
+def load_project_voice_settings(project_name: str) -> dict:
+    """Load per-project voice settings JSON from S3. Returns {} if missing."""
+    try:
+        key = _project_settings_key(project_name, "voice_settings.json")
+        data = s3_read_json(key)
+        return data or {}
+    except Exception:
+        return {}
+
+
+def save_project_voice_settings(project_name: str, payload: dict) -> None:
+    """Persist per-project voice settings JSON to S3."""
+    key = _project_settings_key(project_name, "voice_settings.json")
+    try:
+        s3_write_json(key, payload or {})
+    except Exception:
+        # best-effort, do not raise
+        pass
 
     def get_pending_chunks(self) -> List[str]:
         return [c["id"] for c in self.state.get("chunks", []) if c.get("status") != "DONE"]
