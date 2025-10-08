@@ -117,6 +117,32 @@ class DialogueAudioGenerator:
             st.error(f"Error generating speech for '{text[:30]}...': {e}")
             return AudioSegment.silent(duration=1000)
 
+    def generate_preview(self, voice_id: str, text: str, project_name: str = "default"):
+        """
+        Generate a short voice preview using per-project voice settings.
+        Mirrors generate_speech() but automatically loads the project's saved settings.
+        """
+        try:
+            from utils.voice_settings import normalize_settings
+            from utils.state_manager import load_project_voice_settings
+            try:
+                voice_settings = normalize_settings(
+                    load_project_voice_settings(project_name))
+            except Exception:
+                voice_settings = {}
+            return self.generate_speech(
+                voice_id=voice_id,
+                text=text,
+                voice_settings=voice_settings,
+            )
+        except Exception:
+            # Fallback: call with defaults if anything goes wrong
+            return self.generate_speech(
+                voice_id=voice_id,
+                text=text,
+                voice_settings={},
+            )
+
     def load_sound_effect(self, effect_name):
         """FX removed: return short silence for compatibility."""
         return AudioSegment.silent(duration=300)

@@ -23,6 +23,7 @@ from .fallback_utils import (
     call_frendli_fallback,
     replace_or_insert_lines,
 )
+from utils.log_instrumentation import log_timed_action
 from utils.session_logger import log_to_session, log_exception
 
 
@@ -104,6 +105,7 @@ class OpenAIParser:
             pass
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
+    @log_timed_action("OpenAI call duration")
     def _call_openai(self, system_prompt: str, user_prompt: str) -> str:
         start_time = time.monotonic()
         print(">>> Calling OpenAI…", flush=True)

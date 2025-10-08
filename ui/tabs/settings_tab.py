@@ -1,9 +1,15 @@
 import streamlit as st
 from utils.voice_settings import DEFAULT_VOICE_SETTINGS, TOOLTIPS, normalize_settings
 from utils.state_manager import load_project_voice_settings, save_project_voice_settings
+from utils.session_logger import log_to_session, log_exception
 
 
 def render(project_name: str):
+    try:
+        log_to_session(
+            "INFO", f"Opened Settings tab (project={project_name})", src="ui/settings_tab.py:render")
+    except Exception:
+        pass
     # Title & unified info
     st.header("Voice Settings")
     st.info(
@@ -70,9 +76,19 @@ def render(project_name: str):
             }
             save_project_voice_settings(project_name or "default", payload)
             st.success("Saved. New generations will use these settings.")
+            try:
+                log_to_session(
+                    "UI", f"Saved settings for {project_name}", src="ui/settings_tab.py:render")
+            except Exception:
+                pass
     with col2:
         if st.button("Reset to Default"):
             save_project_voice_settings(
                 project_name or "default", DEFAULT_VOICE_SETTINGS)
             st.success(
                 "Reset to defaults. Reload the page if controls didn’t update.")
+            try:
+                log_to_session(
+                    "UI", f"Reset settings for {project_name}", src="ui/settings_tab.py:render")
+            except Exception:
+                pass

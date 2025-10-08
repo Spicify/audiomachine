@@ -24,6 +24,7 @@ from utils.voice_settings import normalize_settings
 from parsers.dialogue_parser import DialogueParser
 from audio.generator import DialogueAudioGenerator
 from utils.session_logger import log_to_session, log_exception
+from utils.log_instrumentation import log_timed_action
 
 
 @dataclass
@@ -480,6 +481,7 @@ class ResumableBatchGenerator:
             pass
         return -1
 
+    @log_timed_action("ResumableBatchGenerator.run")
     def run(self, full_text: str, progress_cb: Optional[Callable[[int, int], None]] = None):
         try:
             log_to_session("INFO", "Batch generation started",

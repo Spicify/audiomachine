@@ -68,9 +68,12 @@ def create_emotion_preview_tab():
 
                 # Generate audio
                 with st.spinner("Generating voice preview..."):
-                    audio = generator.generate_speech(
+                    project_name = st.session_state.get(
+                        "current_project") or "default"
+                    audio = generator.generate_preview(
                         voice_id=selected_voice["voice_id"],
-                        text=preview_text
+                        text=preview_text,
+                        project_name=project_name,
                     )
 
                     # Convert to bytes

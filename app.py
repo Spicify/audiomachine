@@ -21,6 +21,9 @@ from utils.session_logger import (
     get_session_log_key,
 )
 import atexit
+import platform
+import os
+import psutil
 from utils.chunking import chunk_text
 from audio.batch_generator import ResumableBatchGenerator
 from utils.state_manager import ProjectStateManager
@@ -414,8 +417,18 @@ def main():
             init_session_logger(project_id_guess)
             ensure_background_tasks()
             log_to_session("INFO", "App session started", src="app.py")
+            try:
+                proc = psutil.Process(os.getpid())
+                rss = proc.memory_info().rss / (1024*1024)
+                log_to_session(
+                    "INFO", f"Python {platform.python_version()}, PID={os.getpid()}")
+                log_to_session("DIAG", f"Startup memory: {rss:.2f} MB")
+            except Exception:
+                pass
             # Register final flush once per session
             try:
+                atexit.register(lambda: log_to_session(
+                    "INFO", "App session terminated", src="app.py"))
                 atexit.register(final_flush)
             except Exception:
                 pass

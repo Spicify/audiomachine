@@ -5,6 +5,7 @@ from queue import Queue, Empty
 from parsers.openai_parser.chunker import build_chunks
 import streamlit as st
 import uuid
+from utils.session_logger import log_to_session, log_exception
 
 
 def _amb_widget_key(chunk: dict, amb_id: str, amb_idx: int, role: str = "main") -> str:
@@ -18,6 +19,11 @@ def _amb_widget_key(chunk: dict, amb_id: str, amb_idx: int, role: str = "main") 
 
 def create_raw_parser_tab(get_known_characters_callable):
     import streamlit as st
+    try:
+        log_to_session("INFO", "User opened Raw Parser tab",
+                       src="ui/raw_parser_tab.py:create_raw_parser_tab")
+    except Exception:
+        pass
 
     st.markdown("### 📚 Raw Text → Dialogue Parser")
     st.markdown(
@@ -91,6 +97,11 @@ def create_raw_parser_tab(get_known_characters_callable):
         "🔍 Convert Raw → Dialogue", type="primary", use_container_width=True, key="raw_convert_btn")
 
     if clicked_convert:
+        try:
+            log_to_session("UI", "Clicked Convert Raw → Dialogue",
+                           src="ui/raw_parser_tab.py:create_raw_parser_tab")
+        except Exception:
+            pass
         if not raw_text.strip():
             st.error("Please paste some raw prose first.")
         else:
@@ -116,7 +127,14 @@ def create_raw_parser_tab(get_known_characters_callable):
 
     # --- Phase 1: run parsing with live progress ---
     if st.session_state.get("parsing_in_progress"):
-        parser = OpenAIParser(include_narration=include_narration)
+        try:
+            parser = OpenAIParser(include_narration=include_narration)
+        except Exception as e:
+            try:
+                log_exception("ui/raw_parser_tab", e)
+            except Exception:
+                pass
+            raise
         # Precompute estimated progress by tokens for smooth animation
         preview_chunks = build_chunks(
             raw_text, max_tokens=parser.max_tokens_per_chunk, model=parser.model, overlap_sentences=2)

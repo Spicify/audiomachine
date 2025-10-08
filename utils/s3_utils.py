@@ -131,6 +131,30 @@ def s3_list_objects(prefix: str = "projects/", bucket: Optional[str] = None) -> 
     return keys
 
 
+def s3_list_objects_with_meta(prefix: str = "projects/", bucket: Optional[str] = None) -> List[Dict[str, Any]]:
+    """List objects with minimal metadata (Key, LastModified).
+
+    Returns a list of dicts: {"Key": str, "LastModified": datetime}.
+    """
+    s3 = get_s3_client()
+    bucket = bucket or get_bucket_defaults()
+    out: List[Dict[str, Any]] = []
+    continuation_token = None
+    while True:
+        kwargs: Dict[str, Any] = {"Bucket": bucket, "Prefix": prefix}
+        if continuation_token:
+            kwargs["ContinuationToken"] = continuation_token
+        resp = s3.list_objects_v2(**kwargs)
+        for item in resp.get("Contents", []):
+            out.append(
+                {"Key": item["Key"], "LastModified": item["LastModified"]})
+        if resp.get("IsTruncated"):
+            continuation_token = resp.get("NextContinuationToken")
+        else:
+            break
+    return out
+
+
 def s3_delete_object(key: str, bucket: Optional[str] = None) -> None:
     s3 = get_s3_client()
     bucket = bucket or get_bucket_defaults()
