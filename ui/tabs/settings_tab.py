@@ -18,26 +18,44 @@ def render(project_name: str):
     st.markdown("<div style='font-size:1.1rem; font-weight:600; margin-bottom:6px;'>Stability</div>",
                 unsafe_allow_html=True)
     stability = st.slider(
-        "", 0.0, 1.0, eff["stability"], help=TOOLTIPS["stability"], label_visibility="collapsed")
+        "Stability",
+        0.0,
+        1.0,
+        eff["stability"],
+        help="Controls how consistent or expressive the voice is. Lower values produce more emotional variation, higher values make speech more stable and neutral.",
+    )
     st.divider()
 
     st.markdown("<div style='font-size:1.1rem; font-weight:600; margin-bottom:6px;'>Clarity + Similarity</div>",
                 unsafe_allow_html=True)
-    sim = st.slider("", 0.0, 1.0, eff["similarity_boost"],
-                    help=TOOLTIPS["similarity_boost"], label_visibility="collapsed")
+    sim = st.slider(
+        "Clarity + Similarity",
+        0.0,
+        1.0,
+        eff["similarity_boost"],
+        help="Balances clarity and similarity to the reference voice. Higher values sound clearer and closer to the original voice; lower values allow more variation and texture.",
+    )
     st.divider()
 
     st.markdown("<div style='font-size:1.1rem; font-weight:600; margin-bottom:6px;'>Style</div>",
                 unsafe_allow_html=True)
     style = st.slider(
-        "", 0.0, 1.0, eff["style"], help=TOOLTIPS["style"], label_visibility="collapsed")
+        "Style",
+        0.0,
+        1.0,
+        eff["style"],
+        help="Adjusts stylistic intensity — how dynamic and performative the speech feels. Higher values make the voice sound more dramatic; lower values keep delivery flatter.",
+    )
     st.divider()
 
     # Speaker Boost: increase title size/weight, keep existing spacing
     st.markdown("<div style='font-size:1.1rem; font-weight:600;'>Speaker Boost</div>",
                 unsafe_allow_html=True)
-    boost = st.toggle("    ", eff["use_speaker_boost"],
-                      help=TOOLTIPS["use_speaker_boost"])
+    boost = st.toggle(
+        "    ",
+        eff["use_speaker_boost"],
+        help="Enhances presence and volume, making the voice sound closer and more prominent. Useful for dialogue-heavy or soft-spoken scenes.",
+    )
 
     # Buttons separated visually
     st.markdown(" ")
