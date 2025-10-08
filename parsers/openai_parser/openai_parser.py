@@ -23,6 +23,7 @@ from .fallback_utils import (
     call_frendli_fallback,
     replace_or_insert_lines,
 )
+from utils.session_logger import log_to_session, log_exception
 
 
 @dataclass
@@ -218,6 +219,11 @@ class OpenAIParser:
         return txt
 
     def convert(self, raw_text: str) -> RawParseResult:
+        try:
+            log_to_session(
+                "INFO", f"Parser convert start (chars={len(raw_text or '')})", src="parsers/openai_parser.py:convert")
+        except Exception:
+            pass
         warnings: List[str] = []
         errors: List[str] = []
         # [DIAG] accumulators for this run
@@ -249,6 +255,10 @@ class OpenAIParser:
                 except Exception as e:
                     errors.append(
                         f"Parser API error on chunk {idx+1}/{len(chunks)}: {e}")
+                    try:
+                        log_exception("parsers/openai_parser.py:convert", e)
+                    except Exception:
+                        pass
                     raise
                 if self.debug_save:
                     self._save_debug_output(
@@ -293,7 +303,11 @@ class OpenAIParser:
                 ):
                     print(
                         "[DIAG] WARNING: REJECTED present but detection found 0 segments.", flush=True)
-            except Exception:
+            except Exception as _fe:
+                try:
+                    log_exception("parsers/openai_parser.py:convert", _fe)
+                except Exception:
+                    pass
                 problem_segments = []
             if problem_segments:
                 for _seg_i, seg in enumerate(problem_segments, start=1):
@@ -367,6 +381,11 @@ class OpenAIParser:
                     except Exception as _fe:
                         print(
                             f"[DEBUG] Fallback error ignored: {_fe}", flush=True)
+                        try:
+                            log_exception(
+                                "parsers/openai_parser.py:convert", _fe)
+                        except Exception:
+                            pass
                         continue
             else:
                 if any(d.get("character", "").upper() == "REJECTED" for d in fixed):
@@ -401,6 +420,11 @@ class OpenAIParser:
                         except Exception as _fe:
                             print(
                                 f"[DIAG] Forced fallback failed: {_fe}", flush=True)
+                            try:
+                                log_exception(
+                                    "parsers/openai_parser.py:convert", _fe)
+                            except Exception:
+                                pass
                             continue
                 else:
                     print("[DEBUG] No fallback needed for this chunk", flush=True)
@@ -508,8 +532,12 @@ class OpenAIParser:
             if to_reinject:
                 warnings.append(
                     f"Re-injected {len(to_reinject)} missing sentence(s) as Narrator.")
-        except Exception:
+        except Exception as _se:
             # Never fail the main flow due to safeguard
+            try:
+                log_exception("parsers/openai_parser.py:convert", _se)
+            except Exception:
+                pass
             pass
 
         # Final purge of REJECTED lines before formatting
@@ -558,6 +586,11 @@ class OpenAIParser:
         except Exception:
             pass
 
+        try:
+            log_to_session("INFO", "Parser convert end (success)",
+                           src="parsers/openai_parser.py:convert")
+        except Exception:
+            pass
         return RawParseResult("\n".join(formatted_lines), reconciled, stats, ambiguities, warnings, errors)
 
     def _line_key(self, it: Dict[str, Any]) -> str:

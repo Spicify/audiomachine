@@ -13,6 +13,14 @@ from ui.tabs.voice_manager_tab import create_voice_manager_tab
 from ui.tabs.settings_tab import render as render_settings_tab
 from ui.tabs.raw_parser_tab import create_raw_parser_tab
 from ui.history import create_history_tab
+from utils.session_logger import (
+    init_session_logger,
+    ensure_background_tasks,
+    log_to_session,
+    final_flush,
+    get_session_log_key,
+)
+import atexit
 from utils.chunking import chunk_text
 from audio.batch_generator import ResumableBatchGenerator
 from utils.state_manager import ProjectStateManager
@@ -393,6 +401,36 @@ def main():
     # Check password authentication
     if not check_password():
         return
+
+    # --- Session logger init (once per session) ---
+    try:
+        # Derive a best-effort project id from session (may be empty initially)
+        project_id_guess = (
+            st.session_state.get('main_project_name')
+            or st.session_state.get('upload_project_name')
+            or None
+        )
+        if not st.session_state.get("_session_logger_inited"):
+            init_session_logger(project_id_guess)
+            ensure_background_tasks()
+            log_to_session("INFO", "App session started", src="app.py")
+            # Register final flush once per session
+            try:
+                atexit.register(final_flush)
+            except Exception:
+                pass
+            st.session_state["_session_logger_inited"] = True
+        # Optional debug-only hook to show active session log key
+        try:
+            import os as _os
+            if _os.getenv("ENABLE_LOG_KEY_DEBUG") == "1":
+                key = get_session_log_key()
+                if key:
+                    st.caption(f"Session Log: {key}")
+        except Exception:
+            pass
+    except Exception:
+        pass
 
     # 🔄 Add Reset Session button in sidebar
     st.sidebar.markdown("### 🛠️ Utilities")

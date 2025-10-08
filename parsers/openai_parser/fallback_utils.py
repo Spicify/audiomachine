@@ -109,33 +109,25 @@ def _normalize_text(s: str) -> str:
     return s.strip().lower()
 
 
+_SENT_SPLIT_RX = re.compile(r'(?<=[.!?])\s+')
+
+
 def _split_sentences(text: str) -> list[dict]:
     parts: list[dict] = []
     if not text:
         return parts
-    # Quote-aware minimal splitter: split after ., !, ? possibly followed by closing quotes/brackets
-    # Also handle ellipses: treat ... or … as end only if followed by whitespace
-    pattern = r"(?:(?<=\.{3}[\"”’)\)]|…[\"”’)\)]|[.!?][\"”’)\)]|[.!?]))\s+"
-    raw_chunks = re.split(pattern, text.strip())
-    buf: list[str] = []
-    for chunk in raw_chunks:
-        c = (chunk or "").strip()
+    # Normalize whitespace without altering content semantics
+    norm_text = re.sub(r"\s+", " ", text.strip())
+    chunks = re.split(_SENT_SPLIT_RX, norm_text)
+    idx = 0
+    for c in chunks:
+        c = (c or "").strip()
         if not c:
             continue
-        buf.append(c)
-        # finalize buffer when likely sentence end or long residual
-        if re.search(r"(\.{3}|…|[.!?])$", c) or len(" ".join(buf)) > 180:
-            original = " ".join(buf).strip()
-            norm = _normalize_text(original)
-            if norm and norm not in {'"', "'"}:
-                parts.append(
-                    {"index": len(parts), "text": original, "norm": norm})
-            buf = []
-    if buf:
-        original = " ".join(buf).strip()
-        norm = _normalize_text(original)
+        norm = _normalize_text(c)
         if norm and norm not in {'"', "'"}:
-            parts.append({"index": len(parts), "text": original, "norm": norm})
+            parts.append({"index": idx, "text": c, "norm": norm})
+            idx += 1
     return parts
 
 

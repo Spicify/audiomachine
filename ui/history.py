@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 
 from utils.s3_utils import s3_list_json, s3_read_json, s3_generate_presigned_url, s3_get_bytes
 from utils.s3_utils import s3_list_objects_page, s3_list_recent_json, s3_object_exists, s3_list_projects_page
+from utils.session_logger import log_to_session
 
 
 def _parse_iso(ts: str) -> datetime:
@@ -21,6 +22,12 @@ def _format_dt(dt: datetime, tz_label: str = "UTC") -> str:
 
 
 def create_history_tab():
+    # Minimal UI instrumentation
+    try:
+        log_to_session("INFO", "History tab opened",
+                       src="ui/history.py:create_history_tab")
+    except Exception:
+        pass
     # Main header layout
     header_col1, header_col2 = st.columns([0.7, 0.3])
 
@@ -169,6 +176,11 @@ def create_history_tab():
     with header_col2:
         if st.button("📄 Download Latest Logs", key="download_latest_logs", use_container_width=True):
             try:
+                log_to_session("UI", "Clicked Download Latest Logs",
+                               src="ui/history.py:create_history_tab")
+            except Exception:
+                pass
+            try:
                 if latest_project_id:
                     log_key = f"projects/{latest_project_id}/logs/latest.log"
                     data = s3_get_bytes(log_key)
@@ -233,6 +245,11 @@ def create_history_tab():
     col1, col2 = st.columns([1, 1])
     with col1:
         if st.button("◀ Previous Page", disabled=st.session_state["history_page"] <= 1, key="hist_prev_btn"):
+            try:
+                log_to_session("UI", "History pagination: Prev",
+                               src="ui/history.py:create_history_tab")
+            except Exception:
+                pass
             st.session_state["history_page"] = max(
                 1, st.session_state["history_page"] - 1)
             # For previous pages, we don't need to update tokens since we use cached data
@@ -240,6 +257,11 @@ def create_history_tab():
 
     with col2:
         if next_token and st.button("Next ▶", key="hist_next_btn"):
+            try:
+                log_to_session("UI", "History pagination: Next",
+                               src="ui/history.py:create_history_tab")
+            except Exception:
+                pass
             st.session_state["history_page"] += 1
             st.session_state["history_page_token"] = next_token
             st.rerun()

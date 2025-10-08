@@ -23,6 +23,7 @@ from audio.utils import get_flat_character_voices
 from utils.voice_settings import normalize_settings
 from parsers.dialogue_parser import DialogueParser
 from audio.generator import DialogueAudioGenerator
+from utils.session_logger import log_to_session, log_exception
 
 
 @dataclass
@@ -480,6 +481,11 @@ class ResumableBatchGenerator:
         return -1
 
     def run(self, full_text: str, progress_cb: Optional[Callable[[int, int], None]] = None):
+        try:
+            log_to_session("INFO", "Batch generation started",
+                           src="audio/batch_generator.py:run")
+        except Exception:
+            pass
         sequence = self._build_sequence(full_text)
         if not sequence:
             return
@@ -617,10 +623,19 @@ class ResumableBatchGenerator:
                         seg = speech_futures[i].result()
                         print(
                             f"[generator] speech done idx={i} seg_len_ms={len(seg)}", flush=True)
+                        try:
+                            log_to_session(
+                                "INFO", f"TTS collected idx={i} len_ms={len(seg)}", src="audio/batch_generator.py:run")
+                        except Exception:
+                            pass
                     except Exception as e:
                         print(
                             f"[generator] speech error idx={i}: {type(e).__name__}: {e}", flush=True)
                         seg = AudioSegment.silent(duration=200)
+                        try:
+                            log_exception("audio/batch_generator.py:run", e)
+                        except Exception:
+                            pass
                 # FX removed: ignore sound_effect entries if any remain
                 elif entry.get("type") == "sound_effect":
                     print(
@@ -657,6 +672,12 @@ class ResumableBatchGenerator:
                     consolidated, seg, pad_after=pad_after)
                 print(
                     f"[generator] consolidated_len_ms={len(consolidated)} after idx={i}", flush=True)
+                try:
+                    if (i % 5) == 0:
+                        log_to_session(
+                            "DIAG", f"consolidated_len_ms={len(consolidated)} after idx={i}", src="audio/batch_generator.py:run")
+                except Exception:
+                    pass
 
                 # Mark chunk done early (before upload) for visibility; resumability is guarded by committed_index
                 try:
@@ -693,12 +714,21 @@ class ResumableBatchGenerator:
                         print(
                             f"[upload] batch upload idx={i} completed={completed} total={total} len_ms={len(consolidated)} key={self.audio_key}", flush=True)
                         self._upload_and_update(consolidated, i)
+                        try:
+                            log_to_session(
+                                "INFO", f"batch upload complete idx={i} len_ms={len(consolidated)}", src="audio/batch_generator.py:run")
+                        except Exception:
+                            pass
                         print(
                             f"[state] committed_index updated -> {i}", flush=True)
                     except Exception as e:
                         print(
                             f"[upload] batch upload error idx={i}: {type(e).__name__}: {e}", flush=True)
                         # Continue; next batch will attempt again
+                        try:
+                            log_exception("audio/batch_generator.py:run", e)
+                        except Exception:
+                            pass
                         pass
 
         # Final mastering and upload normalized audio
@@ -707,6 +737,10 @@ class ResumableBatchGenerator:
         except Exception as e:
             print(
                 f"[generator] finalize error: {type(e).__name__}: {e}", flush=True)
+            try:
+                log_exception("audio/batch_generator.py:run", e)
+            except Exception:
+                pass
             pass
         try:
             print(
@@ -731,10 +765,19 @@ class ResumableBatchGenerator:
             self.state.set_latest_url(
                 s3_generate_presigned_url(self.audio_key, 3600))
             self.state.save()
+            try:
+                log_to_session("INFO", "final upload complete",
+                               src="audio/batch_generator.py:run")
+            except Exception:
+                pass
         except Exception as e:
             print(
                 f"[upload] final upload error: {type(e).__name__}: {e}", flush=True)
             # Leave state as-is; history UI may still show partial
+            try:
+                log_exception("audio/batch_generator.py:run", e)
+            except Exception:
+                pass
             pass
         finally:
             # stop heartbeat on exit

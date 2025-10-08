@@ -1,10 +1,19 @@
+from parsers.openai_parser.openai_parser import OpenAIParser
+import time
+import threading
+from queue import Queue, Empty
+from parsers.openai_parser.chunker import build_chunks
 import streamlit as st
 import uuid
-from parsers.openai_parser.openai_parser import OpenAIParser
-from parsers.openai_parser.chunker import build_chunks
-from queue import Queue, Empty
-import threading
-import time
+
+
+def _amb_widget_key(chunk: dict, amb_id: str, amb_idx: int, role: str = "main") -> str:
+    # ensure each chunk has a stable uuid
+    cu = chunk.get("uuid")
+    if not cu:
+        cu = uuid.uuid4().hex[:8]
+        chunk["uuid"] = cu
+    return f"amb_{role}_{cu}_{amb_id}_{amb_idx}"
 
 
 def create_raw_parser_tab(get_known_characters_callable):
@@ -89,7 +98,10 @@ def create_raw_parser_tab(get_known_characters_callable):
             # Cleanup any stale ambiguity widget keys before rebuilding
             try:
                 for _k in list(st.session_state.keys()):
-                    if isinstance(_k, str) and (_k.startswith("amb_sel_") or _k.startswith("amb_new_")):
+                    if isinstance(_k, str) and (
+                        _k.startswith("amb_sel_") or _k.startswith("amb_new_") or _k.startswith(
+                            "amb_main_") or _k.startswith("amb_sel") or _k.startswith("amb_new") or _k.startswith("amb_")
+                    ):
                         del st.session_state[_k]
             except Exception:
                 pass
@@ -334,7 +346,7 @@ def create_raw_parser_tab(get_known_characters_callable):
                     if ambs:
                         # Light shading/indent via container nesting
                         with st.container():
-                            for amb in ambs:
+                            for amb_idx, amb in enumerate(ambs):
                                 amb_id = amb.get("id")
                                 # Allowed options: characters that appeared in this chunk + optional custom
                                 chunk_chars = []
@@ -379,12 +391,12 @@ def create_raw_parser_tab(get_known_characters_callable):
                                         current_value) if current_value in options else 0
                                 except Exception:
                                     idx = 0
-                                chunk_uuid = ch.get("uuid") or "noid"
                                 selection = st.selectbox(
                                     label,
                                     options=options if options else [""],
                                     index=idx if options else 0,
-                                    key=f"amb_sel_{chunk_uuid}_{amb_id}",
+                                    key=_amb_widget_key(
+                                        ch, amb_id, amb_idx, role="sel"),
                                     help="ℹ️ All Ambiguities will be updated once parsing is complete."
                                 )
 
@@ -393,7 +405,8 @@ def create_raw_parser_tab(get_known_characters_callable):
                                     new_val = st.text_input(
                                         "Enter new character name:",
                                         value=(custom_name or ""),
-                                        key=f"amb_new_{chunk_uuid}_{amb_id}"
+                                        key=_amb_widget_key(
+                                            ch, amb_id, amb_idx, role="new")
                                     ).strip()
                                     if new_val:
                                         st.session_state["ambiguity_custom"][amb_id] = new_val
