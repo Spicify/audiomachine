@@ -1,0 +1,376 @@
+[LOG_START] Parser debug capture started (2025-10-09_154527)
+>>> Building chunks (input chars=10468)
+>>> Built 2 chunks
+>>> Starting chunk 1/2 (approx tokens=1496)
+>>> Calling OpenAI…
+[progress] chunk=1, tokens=1496, est_seconds=179.5, steps=60, per_step=2.992, start=0, target=60
+[session_logger] Uploaded projects/global/session_logs/2025-10-09T14-11-04Z.log (1506 bytes)
+[session_logger] Uploaded projects/global/session_logs/2025-10-09T14-11-04Z.log (2543 bytes)
+>>> OpenAI responded in 307438 ms (chars=15860)
+>>> Got response (chars=15860)
+>>> Parsed 140 items
+[DIAG] detect_missing_or_rejected_lines() received 140 lines with 0 REJECTED
+[DEBUG] Detection: missing_groups=0 rejected_mapped=0 (total=0)
+[DEBUG] Fallback overlap filtered: 0 skipped (REJECTED kept 0)
+[DEBUG] Fallback detection: 0 segment(s) found
+[DEBUG] No fallback needed for this chunk
+[DIAG] Streaming reinjection: considered=96
+>>> Yielding chunk 1/2: dialogues=137, ambiguities=6
+>>> Starting chunk 2/2 (approx tokens=989)
+>>> Calling OpenAI…
+[raw_parser_tab] progress 1/2 → 60%
+[progress] chunk=2, tokens=989, est_seconds=118.7, steps=40, per_step=2.967, start=60, target=100
+[session_logger] Uploaded projects/global/session_logs/2025-10-09T14-11-04Z.log (3721 bytes)
+>>> OpenAI responded in 142875 ms (chars=9300)
+>>> Got response (chars=9300)
+
+===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT BEGIN =====
+And we’re going to enjoy every second.” But then they did the unthinkable. They left her there. Tied wide. Dripping. Blindfolded. And walked into the bathroom. She heard the water turn on. Their voices — soft, low, chuckling. The bastards were showering. Letting her squirm. She writhed against the cuffs, moaning softly, tugging at the bar holding her wide open. Dripping. Throbbing. Desperate. “Aleksandr…” she called, her voice breaking. No response. “Mikhail…” 
+Nothing but the sound of water and her own panting breaths. And then — after what felt like hours — footsteps. “Look at her,” Mikhail murmured. “Our filthy little kitten. Already soaked.” “Think she’s learned her lesson?” Aleksandr asked, dragging a finger through her folds, 
+making her wail. “Not yet,” Mikhail replied. “But we’ll make sure she does.” Aleksandr climbed onto the bed, kneeling between her spread thighs. “You begged for this, 
+baby. Tied open. On display. Waiting for us to devour you.” And then he thrust inside her. Hard. Deep. She screamed. Mikhail climbed up behind her, uncuffing her wrists just to pull her upright — her arms 
+wrapped around his neck, his cock rubbing against her lower back. “Take it,” he growled. “Take him. Take us.” Aleksandr drove into her mercilessly, hand gripping her throat, moaning every time she 
+clenched around him. “You feel that baby?” he snarled. “That’s what happens when you tease us in public.” Mikhail bit her shoulder, then slid inside her from behind — stretching her wide, filling her 
+completely, making her scream. “Look at you,” Aleksandr panted, his thumb sweeping over her lip. “Taking both of us like a 
+good girl. Perfect little slut for your men, aren’t you?” “Yes!” she cried as Mikhail thrust deeper. “Yes!” “Yes!” They worked her together — one pounding in while the other pulled back, then switching, 
+never letting her adjust, never letting her rest. The friction was exquisite, the pleasure almost 
+unbearable. Mikhail’s teeth found her neck as his hand slipped around, finding her clit and rubbing hard, 
+fast, knowing just how she needed it. “Come for us princess,” he demanded. “Right fucking now.” She shattered with a sob, her entire body trembling as they kept thrusting — deeper, harder 
+— drawing out every last wave of her release. When she finally stilled, boneless against them, Mikhail chuckled darkly. “Not done yet, 
+princess. Aleksandr hasn’t come.” “Not nearly done,” Aleksandr agreed, his grip bruising on her hips as he slammed into her. “Turn her. I want to feel her tight hole.” Mikhail pulled out, laying her down and uncuffing one ankle to flip her onto her stomach — then strapping her back in, legs still wide, helpless, exposed. Aleksandr thrust back inside 
+her with a groan. He looked fierce, possessive, utterly undone. “Mine,” he growled, punctuating the word with 
+a deep thrust. “Always mine.” He bent over her, kissing her roughly, his tongue dominating her mouth. Behind them, 
+Mikhail climbed back on the bed positioning himself at her face. “Suck,” he ordered. She obeyed, taking him deep, tasting herself on him. He gripped the headboard, thrusting 
+shallowly, careful not to choke her as Aleksandr continued to pound into her from behind. “Such a good girl,” Mikhail murmured, brushing a strand of hair from her face. “Taking us 
+both so well. Such a perfect little toy.” Aleksandr bit down on her shoulder as he came, his cock pulsing inside her. She moaned 
+around Mikhail’s cock, the vibration making him hiss. “Fuck baby ,” Mikhail ground out. “Perfect,” he growled, his fingers tangling in her hair. “Fucking perfect for us.” With a few more quick thrusts, he followed them over the edge, filling her mouth. She 
+swallowed, savoring every last drop before he pulled out and collapsed beside her. Aleksandr slid out gently, removing the cuffs and blindfold, and wrapped himself around her 
+from behind. Mikhail pressed close to her front, his hand splaying across her stomach. Mikhail kissed her eyes. “You okay kitten?” She nodded, breathless. “I’ve never felt more loved.” Mikhail cupped her face, wiping away tears and sweat. “You’re ours. Always.”
+===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT END =====
+
+
+===== [EOD][OPENAI_RAW] LAST CHUNK RAW BEGIN (first 60 lines) =====
+01: {"character":"REJECTED","emotions":["neutral","calm"],"text":"And we’re going to enjoy every second.”"}
+02: {"character":"REJECTED","emotions":["neutral","calm"],"text":"But then they did the unthinkable."}
+03: {"character":"REJECTED","emotions":["neutral","calm"],"text":"They left her there."}
+04: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Tied wide."}
+05: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Dripping."}
+06: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Blindfolded."}
+07: {"character":"REJECTED","emotions":["neutral","calm"],"text":"And walked into the bathroom."}
+08: {"character":"REJECTED","emotions":["neutral","calm"],"text":"She heard the water turn on."}
+09: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Their voices — soft, low, chuckling."}
+10: {"character":"REJECTED","emotions":["neutral","calm"],"text":"The bastards were showering."}
+11: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Letting her squirm."}
+12: {"character":"REJECTED","emotions":["neutral","calm"],"text":"She writhed against the cuffs, moaning softly, tugging at the bar holding her wide open."}
+13: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Dripping."}
+14: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Throbbing."}
+15: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Desperate."}
+16: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Aleksandr…” she called, her voice breaking."}
+17: {"character":"REJECTED","emotions":["neutral","calm"],"text":"No response."}
+18: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Mikhail…”"}
+19: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Nothing but the sound of water and her own panting breaths."}
+20: {"character":"REJECTED","emotions":["neutral","calm"],"text":"And then — after what felt like hours — footsteps."}
+21: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Look at her,” Mikhail murmured."}
+22: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Our filthy little kitten."}
+23: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Already soaked.”"}
+24: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Think she’s learned her lesson?” Aleksandr asked, dragging a finger through her folds, making her wail."}
+25: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Not yet,” Mikhail replied."}
+26: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“But we’ll make sure she does.”"}
+27: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Aleksandr climbed onto the bed, kneeling between her spread thighs."}
+28: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“You begged for this, baby. Tied open. On display. Waiting for us to devour you.”"}
+29: {"character":"REJECTED","emotions":["neutral","calm"],"text":"And then he thrust inside her."}
+30: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Hard."}
+31: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Deep."}
+32: {"character":"REJECTED","emotions":["neutral","calm"],"text":"She screamed."}
+33: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Mikhail climbed up behind her, uncuffing her wrists just to pull her upright — her arms wrapped around his neck, his cock rubbing against her lower back."}
+34: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Take it,” he growled."}
+35: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Take him. Take us.”"}
+36: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Aleksandr drove into her mercilessly, hand gripping her throat, moaning every time she clenched around him."}
+37: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“You feel that baby?” he snarled."}
+38: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“That’s what happens when you tease us in public.”"}
+39: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Mikhail bit her shoulder, then slid inside her from behind — stretching her wide, filling her completely, making her scream."}
+40: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Look at you,” Aleksandr panted, his thumb sweeping over her lip."}
+41: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Taking both of us like a good girl. Perfect little slut for your men, aren’t you?”"}
+42: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Yes!” she cried as Mikhail thrust deeper."}
+43: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Yes!”"}
+44: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Yes!”"}
+45: {"character":"REJECTED","emotions":["neutral","calm"],"text":"They worked her together — one pounding in while the other pulled back, then switching, never letting her adjust, never letting her rest."}
+46: {"character":"REJECTED","emotions":["neutral","calm"],"text":"The friction was exquisite, the pleasure almost unbearable."}
+47: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Mikhail’s teeth found her neck as his hand slipped around, finding her clit and rubbing hard, fast, knowing just how she needed it."}
+48: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Come for us princess,” he demanded."}
+49: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Right fucking now.”"}
+50: {"character":"REJECTED","emotions":["neutral","calm"],"text":"She shattered with a sob, her entire body trembling as they kept thrusting — deeper, harder — drawing out every last wave of her release."}
+51: {"character":"REJECTED","emotions":["neutral","calm"],"text":"When she finally stilled, boneless against them, Mikhail chuckled darkly."}
+52: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Not done yet, princess. Aleksandr hasn’t come.”"}
+53: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Not nearly done,” Aleksandr agreed, his grip bruising on her hips as he slammed into her."}
+54: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Turn her. I want to feel her tight hole.”"}
+55: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Mikhail pulled out, laying her down and uncuffing one ankle to flip her onto her stomach — then strapping her back in, legs still wide, helpless, exposed."}
+56: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Aleksandr thrust back inside her with a groan."}
+57: {"character":"REJECTED","emotions":["neutral","calm"],"text":"He looked fierce, possessive, utterly undone."}
+58: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Mine,” he growled, punctuating the word with a deep thrust."}
+59: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Always mine.”"}
+60: {"character":"REJECTED","emotions":["neutral","calm"],"text":"He bent over her, kissing her roughly, his tongue dominating her mouth."}
+===== [EOD][OPENAI_RAW] LAST CHUNK RAW END =====
+
+>>> Parsed 81 items
+[DIAG] REJECTED line entering validator: And we’re going to enjoy every second.”
+[DIAG] REJECTED line entering validator: But then they did the unthinkable.
+[DIAG] REJECTED line entering validator: They left her there.
+[DIAG] REJECTED line entering validator: Tied wide.
+[DIAG] REJECTED line entering validator: Dripping.
+[DIAG] REJECTED line entering validator: Blindfolded.
+[DIAG] REJECTED line entering validator: And walked into the bathroom.
+[DIAG] REJECTED line entering validator: She heard the water turn on.
+[DIAG] REJECTED line entering validator: Their voices — soft, low, chuckling.
+[DIAG] REJECTED line entering validator: The bastards were showering.
+[DIAG] REJECTED line entering validator: Letting her squirm.
+[DIAG] REJECTED line entering validator: She writhed against the cuffs, moaning softly, tugging at th
+[DIAG] REJECTED line entering validator: Dripping.
+[DIAG] REJECTED line entering validator: Throbbing.
+[DIAG] REJECTED line entering validator: Desperate.
+[DIAG] REJECTED line entering validator: “Aleksandr…” she called, her voice breaking.
+[DIAG] REJECTED line entering validator: No response.
+[DIAG] REJECTED line entering validator: “Mikhail…”
+[DIAG] REJECTED line entering validator: Nothing but the sound of water and her own panting breaths.
+[DIAG] REJECTED line entering validator: And then — after what felt like hours — footsteps.
+[DIAG] REJECTED line entering validator: “Look at her,” Mikhail murmured.
+[DIAG] REJECTED line entering validator: “Our filthy little kitten.
+[DIAG] REJECTED line entering validator: Already soaked.”
+[DIAG] REJECTED line entering validator: “Think she’s learned her lesson?” Aleksandr asked, dragging 
+[DIAG] REJECTED line entering validator: “Not yet,” Mikhail replied.
+[DIAG] REJECTED line entering validator: “But we’ll make sure she does.”
+[DIAG] REJECTED line entering validator: Aleksandr climbed onto the bed, kneeling between her spread 
+[DIAG] REJECTED line entering validator: “You begged for this, baby. Tied open. On display. Waiting f
+[DIAG] REJECTED line entering validator: And then he thrust inside her.
+[DIAG] REJECTED line entering validator: Hard.
+[DIAG] REJECTED line entering validator: Deep.
+[DIAG] REJECTED line entering validator: She screamed.
+[DIAG] REJECTED line entering validator: Mikhail climbed up behind her, uncuffing her wrists just to 
+[DIAG] REJECTED line entering validator: “Take it,” he growled.
+[DIAG] REJECTED line entering validator: “Take him. Take us.”
+[DIAG] REJECTED line entering validator: Aleksandr drove into her mercilessly, hand gripping her thro
+[DIAG] REJECTED line entering validator: “You feel that baby?” he snarled.
+[DIAG] REJECTED line entering validator: “That’s what happens when you tease us in public.”
+[DIAG] REJECTED line entering validator: Mikhail bit her shoulder, then slid inside her from behind —
+[DIAG] REJECTED line entering validator: “Look at you,” Aleksandr panted, his thumb sweeping over her
+[DIAG] REJECTED line entering validator: “Taking both of us like a good girl. Perfect little slut for
+[DIAG] REJECTED line entering validator: “Yes!” she cried as Mikhail thrust deeper.
+[DIAG] REJECTED line entering validator: “Yes!”
+[DIAG] REJECTED line entering validator: “Yes!”
+[DIAG] REJECTED line entering validator: They worked her together — one pounding in while the other p
+[DIAG] REJECTED line entering validator: The friction was exquisite, the pleasure almost unbearable.
+[DIAG] REJECTED line entering validator: Mikhail’s teeth found her neck as his hand slipped around, f
+[DIAG] REJECTED line entering validator: “Come for us princess,” he demanded.
+[DIAG] REJECTED line entering validator: “Right fucking now.”
+[DIAG] REJECTED line entering validator: She shattered with a sob, her entire body trembling as they 
+[DIAG] REJECTED line entering validator: When she finally stilled, boneless against them, Mikhail chu
+[DIAG] REJECTED line entering validator: “Not done yet, princess. Aleksandr hasn’t come.”
+[DIAG] REJECTED line entering validator: “Not nearly done,” Aleksandr agreed, his grip bruising on he
+[DIAG] REJECTED line entering validator: “Turn her. I want to feel her tight hole.”
+[DIAG] REJECTED line entering validator: Mikhail pulled out, laying her down and uncuffing one ankle 
+[DIAG] REJECTED line entering validator: Aleksandr thrust back inside her with a groan.
+[DIAG] REJECTED line entering validator: He looked fierce, possessive, utterly undone.
+[DIAG] REJECTED line entering validator: “Mine,” he growled, punctuating the word with a deep thrust.
+[DIAG] REJECTED line entering validator: “Always mine.”
+[DIAG] REJECTED line entering validator: He bent over her, kissing her roughly, his tongue dominating
+[DIAG] REJECTED line entering validator: Behind them, Mikhail climbed back on the bed positioning him
+[DIAG] REJECTED line entering validator: “Suck,” he ordered.
+[DIAG] REJECTED line entering validator: She obeyed, taking him deep, tasting herself on him.
+[DIAG] REJECTED line entering validator: He gripped the headboard, thrusting shallowly, careful not t
+[DIAG] REJECTED line entering validator: “Such a good girl,” Mikhail murmured, brushing a strand of h
+[DIAG] REJECTED line entering validator: “Taking us both so well. Such a perfect little toy.”
+[DIAG] REJECTED line entering validator: Aleksandr bit down on her shoulder as he came, his cock puls
+[DIAG] REJECTED line entering validator: She moaned around Mikhail’s cock, the vibration making him h
+[DIAG] REJECTED line entering validator: “Fuck baby ,” Mikhail ground out.
+[DIAG] REJECTED line entering validator: “Perfect,” he growled, his fingers tangling in her hair.
+[DIAG] REJECTED line entering validator: “Fucking perfect for us.”
+[DIAG] REJECTED line entering validator: With a few more quick thrusts, he followed them over the edg
+[DIAG] REJECTED line entering validator: She swallowed, savoring every last drop before he pulled out
+[DIAG] REJECTED line entering validator: Aleksandr slid out gently, removing the cuffs and blindfold,
+[DIAG] REJECTED line entering validator: Mikhail pressed close to her front, his hand splaying across
+[DIAG] REJECTED line entering validator: Mikhail kissed her eyes.
+[DIAG] REJECTED line entering validator: “You okay kitten?”
+[DIAG] REJECTED line entering validator: She nodded, breathless.
+[DIAG] REJECTED line entering validator: “I’ve never felt more loved.”
+[DIAG] REJECTED line entering validator: Mikhail cupped her face, wiping away tears and sweat.
+[DIAG] REJECTED line entering validator: “You’re ours. Always.”
+[DIAG] detect_missing_or_rejected_lines() received 81 lines with 81 REJECTED
+[DEBUG] Detection: missing_groups=0 rejected_mapped=81 (total=81)
+[DEBUG] Fallback overlap filtered: 0 skipped (REJECTED kept 81)
+[DEBUG] Fallback detection: 81 segment(s) found
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Tied wide.' (sim=0.15)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Dripping.' (sim=0.14)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Dripping.' (sim=0.14)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Blindfolded.' (sim=0.16)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Letting her squirm.' (sim=0.31)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Throbbing.' (sim=0.16)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Desperate.' (sim=0.15)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'No response.' (sim=0.16)
+[DIAG][FB_FILTER] Skipping weak EOD segment '“Mikhail…”' (sim=0.12)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Already soaked.”' (sim=0.16)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Hard.' (sim=0.08)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'Deep.' (sim=0.09)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'She screamed.' (sim=0.18)
+[DIAG][FB_FILTER] Skipping weak EOD segment '“Yes!”' (sim=0.07)
+[DIAG][FB_FILTER] Skipping weak EOD segment '“Yes!”' (sim=0.07)
+[DIAG][FB_FILTER] Skipping weak EOD segment '“Right fucking now.”' (sim=0.22)
+[DIAG][FB_FILTER] Skipping weak EOD segment '“Always mine.”' (sim=0.22)
+[DIAG][FB_FILTER] Skipping weak EOD segment '“Suck,” he ordered.' (sim=0.20)
+[DIAG][FB_FILTER] Skipping weak EOD segment '“You okay kitten?”' (sim=0.17)
+[DIAG][FB_FILTER] Skipping weak EOD segment 'She nodded, breathless.' (sim=0.23)
+[DIAG][FB_FILTER] Skipping weak EOD segment '“You’re ours. Always.”' (sim=0.19)
+[WARN][FB] Excessive fallback segments (60) — merging into a single consolidated fallback request.
+
+----- [EOD][FB] Segment DETECTED (last chunk) -----
+[EOD][FB] seg#1 kind=missing start_idx=None end_idx=None
+[EOD][FB] segment_text (first 300): And we’re going to enjoy every second.” But then they did the unthinkable. They left her there. And walked into the bathroom. She heard the water turn on. Their voices — soft, low, chuckling. The bastards were showering. She writhed against the cuffs, moaning softly, tugging at the bar holding her w
+[DIAG] Known chars before fallback: ['Adam (Family)', 'Adam (Supporting)', 'Adam Stone', 'Aleksandr', 'Alexandra', 'Allison', 'Arabella', 'Aria', 'Astro', 'Boyd', 'Brad', 'Brian', 'Brittney', 'Burt Reynolds', 'Carter', 'Christian', 'Clara', 'Clara (Secondary)', 'Cornelius', 'Dad']
+[DIAG] Last speaker: Aleksandr
+[DIAG] Fallback segment text (len=658): And we’re going to enjoy every second.” But then they did the unthinkable. They left her there. And walked into the bathroom. She heard the water turn on. Their voices — soft, low, chuckling. The bastards were showering. She writhed against the cuffs, moaning softly, tugging at the bar holding her w
+[DIAG] Passing known_characters to fallback: True
+[DEBUG] Frendli token loaded: True
+[DEBUG] FRIENDLI_TOKEN found: True
+[DEBUG] Friendli client base_url: https://api.friendli.ai/serverless/v1/
+[DEBUG] Frendli request URL verified
+[DIAG] Friendli system prompt (first 12 lines):
+[DIAG]   01: You are a strict audiobook dialogue parser.
+[DIAG]   02: Output MUST be JSON Lines (JSONL). One JSON object per line with keys: character, emotions (2 strings), text. Optional: candidates (2–5 strings) only when character == 'Ambiguous'.
+[DIAG]   03: No extra text, no commentary, no blank lines.
+[DIAG]   04: Do NOT invent new character names under any circumstances.
+[DIAG]   05: If the speaker is unclear, use 'Ambiguous' and choose candidates ONLY from Known characters.
+[DIAG]   06: Coverage: Do NOT skip any input sentence.
+[DIAG]   07: If speaker unclear → use 'Ambiguous' with 2–5 candidates from known characters.
+[DIAG]   08: Narration: Use 'Narrator' for objective, third-person description (not tied to any POV).
+[DIAG]   09: Quotes: The text field must contain ONLY the spoken words inside quotes (drop attributions like 'he growled').
+[DIAG]   10: When quotes include attribution verbs (e.g., said, asked, whispered, commanded, moaned, murmured, replied), exclude those verbs from the 'text' (keep only the words inside quotes).
+[DIAG]   11: Speaker inference: When a quoted dialogue appears after a character’s name or pronoun (e.g., Mark said, '…' or he whispered, '…'), infer that character as the speaker of the quoted text.
+[DIAG]   12: Emotions: Exactly TWO per line; if none, use ['neutral','calm'].
+[DIAG] Known characters empty: False; Has 'Do NOT invent names' clause: True
+[DEBUG] Frendli request begin
+[DEBUG] Frendli request end (3843 ms, chars=1225)
+[DEBUG] Fallback raw returned length=1225
+----- [EOD][FB] RAW Friendli OUT (first 30 lines) -----
+01: {"character":"Narrator","emotions":["neutral","calm"],"text":"And we’re going to enjoy every second.”}
+02: {"character":"Narrator","emotions":["neutral","calm"],"text":"They left her there"}
+03: {"character":"Narrator","emotions":["neutral","calm"],"text":"And walked into the bathroom."}
+04: {"character":"Narrator","emotions":["neutral","calm"],"text":"She heard the water turn on"}
+05: {"character":"Narrator","emotions":["neutral","calm"],"text":"Their voices — soft, low, chuckling."}
+06: {"character":"Narrator","emotions":["neutral","calm"],"text":"The bastards were showering."}
+07: {"character":"Maya","emotions":["frustrated","tortured"],"text":"Aleksandr…"}
+08: {"character":"Narrator","emotions":["neutral","calm"],"text":"Nothing but the sound of water and her own panting breaths."}
+09: {"character":"Narrator","emotions":["neutral","calm"],"text":"And then after what felt like hours — footsteps."}
+10: {"character":"Mikhail","emotions":["deviant","cold"],"text":"Look at her"}
+11: {"character":"Mikhail","emotions":["derogatory","superior"],"text":"Our filthy little kitten."}
+12: {"character":"Aleksandr","emotions":["inquisitive","calm"],"text":"Think she’s learned her lesson"}
+13: {"character":"Mikhail","emotions":["recording","calm"],"text":"Not yet"}
+[DIAG] Fallback RAW (first 2 lines): ['{"character":"Narrator","emotions":["neutral","calm"],"text":"And we’re going to enjoy every second.”}', '{"character":"Narrator","emotions":["neutral","calm"],"text":"They left her there"}']
+[DEBUG] Fallback parsed 12 line(s)
+[EOD][FB_SUMMARY] After fuzzy filter (quote-normalized): kept=0, dropped=12
+[DIAG][FB_DROP] sim=0.00 text='They left her there'
+[DIAG][FB_DROP] sim=0.00 text='And walked into the bathroom.'
+[DIAG][FB_DROP] sim=0.00 text='She heard the water turn on'
+[EOD][FB] validated_and_kept=0 line(s) for seg#1
+[DEBUG] Fallback validated 0 line(s)
+[DEBUG] Inserting 0 line(s) at span [0:1]
+[DIAG] Before replace/insert slice 0:3: [(0, 'REJECTED', 'And we’re going to enjoy every second.”'), (1, 'REJECTED', 'But then they did the unthinkable.'), (2, 'REJECTED', 'They left her there.')]
+[DIAG] After replace/insert slice 0:0: []
+[EOD][FB_SUMMARY] After filtering: kept=0 lines for last chunk.
+[DIAG] Streaming reinjection: considered=72
+[DIAG] Streaming reinjected (strict): 'And we’re going to enjoy every second.” But then they did the unthinkable.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.']
+[DIAG] Streaming reinjected (strict): 'They left her there.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Tied wide.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Dripping.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Blindfolded.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'And walked into the bathroom.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'She heard the water turn on.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Their voices — soft, low, chuckling.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'The bastards were showering.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Letting her squirm.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'She writhed against the cuffs, moaning softly, tugging at the bar holding her wide open.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Dripping.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Throbbing.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Desperate.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Aleksandr…” she called, her voice breaking.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'No response.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Mikhail…” Nothing but the sound of water and her own panting breaths.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'And then — after what felt like hours — footsteps.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Look at her,” Mikhail murmured.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Our filthy little kitten.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Already soaked.” “Think she’s learned her lesson?” Aleksandr asked, dragging a finger through her folds, making her wail' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Not yet,” Mikhail replied.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“But we’ll make sure she does.” Aleksandr climbed onto the bed, kneeling between her spread thighs.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“You begged for this, baby.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Tied open.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'On display.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Waiting for us to devour you.” And then he thrust inside her.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Hard.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Deep.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'She screamed.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Mikhail climbed up behind her, uncuffing her wrists just to pull her upright — her arms wrapped around his neck, his coc' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Take it,” he growled.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Take him.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Take us.” Aleksandr drove into her mercilessly, hand gripping her throat, moaning every time she clenched around him.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“You feel that baby?” he snarled.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“That’s what happens when you tease us in public.” Mikhail bit her shoulder, then slid inside her from behind — stretchi' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Look at you,” Aleksandr panted, his thumb sweeping over her lip.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Taking both of us like a good girl.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Perfect little slut for your men, aren’t you?” “Yes!” she cried as Mikhail thrust deeper.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Yes!” “Yes!” They worked her together — one pounding in while the other pulled back, then switching, never letting her ' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'The friction was exquisite, the pleasure almost unbearable.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Mikhail’s teeth found her neck as his hand slipped around, finding her clit and rubbing hard, fast, knowing just how she' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Come for us princess,” he demanded.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Right fucking now.” She shattered with a sob, her entire body trembling as they kept thrusting — deeper, harder — drawi' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'When she finally stilled, boneless against them, Mikhail chuckled darkly.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Not done yet, princess.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Aleksandr hasn’t come.” “Not nearly done,” Aleksandr agreed, his grip bruising on her hips as he slammed into her.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Turn her.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'I want to feel her tight hole.” Mikhail pulled out, laying her down and uncuffing one ankle to flip her onto her stomach' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Aleksandr thrust back inside her with a groan.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'He looked fierce, possessive, utterly undone.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Mine,” he growled, punctuating the word with a deep thrust.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Always mine.” He bent over her, kissing her roughly, his tongue dominating her mouth.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Behind them, Mikhail climbed back on the bed positioning himself at her face.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Suck,” he ordered.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'She obeyed, taking him deep, tasting herself on him.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'He gripped the headboard, thrusting shallowly, careful not to choke her as Aleksandr continued to pound into her from be' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Such a good girl,” Mikhail murmured, brushing a strand of hair from her face.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Taking us both so well.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Such a perfect little toy.” Aleksandr bit down on her shoulder as he came, his cock pulsing inside her.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'She moaned around Mikhail’s cock, the vibration making him hiss.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Fuck baby ,” Mikhail ground out.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Perfect,” he growled, his fingers tangling in her hair.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“Fucking perfect for us.” With a few more quick thrusts, he followed them over the edge, filling her mouth.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'She swallowed, savoring every last drop before he pulled out and collapsed beside her.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Aleksandr slid out gently, removing the cuffs and blindfold, and wrapped himself around her from behind.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Mikhail pressed close to her front, his hand splaying across her stomach.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Mikhail kissed her eyes.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“You okay kitten?” She nodded, breathless.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“I’ve never felt more loved.” Mikhail cupped her face, wiping away tears and sweat.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): '“You’re ours.' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+[DIAG] Streaming reinjected (strict): 'Always.”' | samples=['And we’re going to enjoy every second.” But then they did the unthinkable.', 'They left her there.']
+
+===== [EOD][TAIL] FINAL RECONCILED LAST 20 LINES (pre-REJECTED-purge/stream) =====
+053. [reinj] Narrator: “Always mine.” He bent over her, kissing her roughly, his tongue dominating her mouth.
+054. [reinj] Narrator: Behind them, Mikhail climbed back on the bed positioning himself at her face.
+055. [reinj] Narrator: “Suck,” he ordered.
+056. [reinj] Narrator: She obeyed, taking him deep, tasting herself on him.
+057. [reinj] Narrator: He gripped the headboard, thrusting shallowly, careful not to choke her as Aleksandr continued to pound into her from behind.
+058. [reinj] Narrator: “Such a good girl,” Mikhail murmured, brushing a strand of hair from her face.
+059. [reinj] Narrator: “Taking us both so well.
+060. [reinj] Narrator: Such a perfect little toy.” Aleksandr bit down on her shoulder as he came, his cock pulsing inside her.
+061. [reinj] Narrator: She moaned around Mikhail’s cock, the vibration making him hiss.
+062. [reinj] Narrator: “Fuck baby ,” Mikhail ground out.
+063. [reinj] Narrator: “Perfect,” he growled, his fingers tangling in her hair.
+064. [reinj] Narrator: “Fucking perfect for us.” With a few more quick thrusts, he followed them over the edge, filling her mouth.
+065. [reinj] Narrator: She swallowed, savoring every last drop before he pulled out and collapsed beside her.
+066. [reinj] Narrator: Aleksandr slid out gently, removing the cuffs and blindfold, and wrapped himself around her from behind.
+067. [reinj] Narrator: Mikhail pressed close to her front, his hand splaying across her stomach.
+068. [reinj] Narrator: Mikhail kissed her eyes.
+069. [reinj] Narrator: “You okay kitten?” She nodded, breathless.
+070. [reinj] Narrator: “I’ve never felt more loved.” Mikhail cupped her face, wiping away tears and sweat.
+071. [reinj] Narrator: “You’re ours.
+072. [reinj] Narrator: Always.”
+===== [EOD][TAIL] END =====
+
+>>> Yielding chunk 2/2: dialogues=72, ambiguities=0
+>>> Wrote parser timings/tokens: [307.44 (1496), 142.88 (989)]

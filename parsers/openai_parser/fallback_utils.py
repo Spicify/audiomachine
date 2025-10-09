@@ -164,6 +164,31 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
             continue
         covered = any(
             norm_sent in pt or pt in norm_sent for pt in parsed_norm_texts if pt)
+        # --- NEW: token-similarity fallback detection for partial misses ---
+        if not covered:
+            def _token_similarity(a: str, b: str) -> float:
+                atoks, btoks = set((a or "").split()), set((b or "").split())
+                if not atoks or not btoks:
+                    return 0.0
+                inter = len(atoks & btoks)
+                union = len(atoks | btoks)
+                if union == 0:
+                    return 0.0
+                return inter / union
+
+            for pt in parsed_norm_texts:
+                if not pt:
+                    continue
+                sim = _token_similarity(norm_sent, pt)
+                if sim >= 0.6:
+                    covered = True
+                    break
+            if not covered:
+                try:
+                    print(
+                        f"[DIAG][SIM] missing segment detected by token similarity (no match ≥0.6): '{norm_sent[:80]}'", flush=True)
+                except Exception:
+                    pass
         if not covered:
             uncovered_indices.append(si["index"])
 

@@ -11,7 +11,14 @@ except Exception:  # Fallback if not installed yet
     tiktoken = None  # type: ignore
 
 
-_SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+# Enhanced sentence boundary splitter:
+# - Handles punctuation optionally followed by closing quotes
+# - Handles ellipses (… or ...)
+# - Handles em-dash (—) and en-dash (–)
+# Each lookbehind alternative is fixed-width to remain compatible with Python's regex engine
+_SENT_SPLIT_RE = re.compile(
+    r'(?:(?<=\u2026)|(?<=\.\.\.)|(?<=[.!?]["”’\'])|(?<=[.!?])|(?<=\u2014)|(?<=\u2013))\s+'
+)
 
 # [DIAG] collect cross-speaker duplicate conflicts (normalized_text, speakerA, speakerB)
 _DIAG_DEDUP_CONFLICTS: List[Tuple[str, str, str]] = []

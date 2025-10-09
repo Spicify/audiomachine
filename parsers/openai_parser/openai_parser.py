@@ -1,4 +1,6 @@
 from __future__ import annotations
+from difflib import SequenceMatcher as _SM
+import re as _re_quotes
 
 import datetime
 import hashlib
@@ -6,7 +8,10 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+import difflib
 import time
+import io
+import sys
 
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -25,6 +30,43 @@ from .fallback_utils import (
 )
 from utils.log_instrumentation import log_timed_action
 from utils.session_logger import log_to_session, log_exception
+
+
+class DualLogger(io.TextIOBase):
+    """Duplicates stdout writes to both terminal and an in-memory buffer."""
+
+    def __init__(self, original_stream):
+        super().__init__()
+        self.original = original_stream
+        self.buffer = io.StringIO()
+
+    def write(self, data):
+        try:
+            self.original.write(data)
+            self.original.flush()
+        except Exception:
+            pass
+        try:
+            self.buffer.write(data)
+        except Exception:
+            pass
+        return len(data)
+
+    def flush(self):
+        try:
+            self.original.flush()
+        except Exception:
+            pass
+        try:
+            self.buffer.flush()
+        except Exception:
+            pass
+
+    def get_value(self):
+        try:
+            return self.buffer.getvalue()
+        except Exception:
+            return ""
 
 
 @dataclass
@@ -56,6 +98,89 @@ def _hash_key(text: str, state: Dict[str, Any]) -> str:
                          sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
+# Lightweight text similarity helper for EOD fallback filtering
+
+
+def _token_similarity(a: str, b: str) -> float:
+    """Lightweight text similarity check between two strings (0–1 scale)."""
+    try:
+        if not a or not b:
+            return 0.0
+        return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
+    except Exception:
+        return 0.0
+
+
+def _fuzzy_sim(a: str, b: str) -> float:
+    """SequenceMatcher-based similarity between two strings (0..1)."""
+    try:
+        a = (a or "").strip().lower()
+        b = (b or "").strip().lower()
+        return difflib.SequenceMatcher(None, a, b).ratio()
+    except Exception:
+        return 0.0
+
+
+def _extract_quotes(text: str) -> str:
+    """Extract spoken parts inside quotes for fair comparison against Friendli text."""
+    try:
+        quotes = _re_quotes.findall(r'“([^”]+)”|"([^"]+)"', text or "")
+        if quotes:
+            return " ".join([(q[0] or q[1]) for q in quotes])
+    except Exception:
+        pass
+    return text or ""
+
+
+def _dedupe_chunk_boundaries(all_chunks: List[List[Dict[str, Any]]], threshold: float = 0.9) -> List[Dict[str, Any]]:
+    """
+    Compare only the last line of each chunk with the first line of the next one.
+    If similarity ≥ threshold, drop the earlier line (keep later chunk's version).
+    Works safely with 1+ chunks.
+    """
+    if not all_chunks or len(all_chunks) <= 1:
+        return [line for chunk in (all_chunks or []) for line in chunk]
+
+    deduped: List[List[Dict[str, Any]]] = []
+    for i, chunk in enumerate(all_chunks):
+        if not chunk:
+            continue
+        if i == 0:
+            deduped.append(chunk)
+            continue
+
+        prev_chunk = deduped[-1] if deduped else []
+        current_chunk = chunk
+
+        if not prev_chunk or not current_chunk:
+            deduped.append(current_chunk)
+            continue
+
+        last_prev = prev_chunk[-1]
+        first_curr = current_chunk[0]
+
+        sim = _SM(None, (last_prev.get("text", "") or ""),
+                  (first_curr.get("text", "") or "")).ratio()
+        if sim >= threshold:
+            try:
+                print(
+                    f"[DEDUP] Dropping overlapping line (sim={sim:.2f}): {((last_prev.get('text','') or '')[:80])!r}", flush=True)
+            except Exception:
+                pass
+            prev_chunk = prev_chunk[:-1]
+
+        if deduped:
+            deduped[-1] = prev_chunk
+        deduped.append(current_chunk)
+
+    flat: List[Dict[str, Any]] = [line for chunk in deduped for line in chunk]
+    try:
+        print(
+            f"[EOD][DEDUP_SUMMARY] merged_chunks={len(all_chunks)} → after_dedup={len(flat)} lines", flush=True)
+    except Exception:
+        pass
+    return flat
+
 
 class OpenAIParser:
     # Reinjection strictness gate
@@ -83,6 +208,7 @@ class OpenAIParser:
         # Per-run token counts per chunk (from chunker)
         self._run_chunk_token_counts: List[int] = []
         self._last_call_elapsed_sec: float = 0.0
+        self._eod_fallback_throttled: bool = False
 
     def _state_summary(self, state: ParserState) -> Dict[str, Any]:
         return {
@@ -221,6 +347,22 @@ class OpenAIParser:
         return txt
 
     def convert(self, raw_text: str) -> RawParseResult:
+        # --- Start unified debug capture ---
+        log_dir = Path("logs")
+        try:
+            log_dir.mkdir(exist_ok=True)
+        except Exception:
+            pass
+        ts = datetime.datetime.utcnow().strftime("%Y-%m-%d_%H%M%S")
+        log_path = log_dir / f"parser_run_{ts}.txt"
+
+        _original_stdout = sys.stdout
+        _original_stderr = sys.stderr
+        _dual_logger = DualLogger(sys.stdout)
+        sys.stdout = _dual_logger
+        sys.stderr = _dual_logger
+        print(f"[LOG_START] Parser debug capture started ({ts})", flush=True)
+
         try:
             log_to_session(
                 "INFO", f"Parser convert start (chars={len(raw_text or '')})", src="parsers/openai_parser.py:convert")
@@ -240,9 +382,19 @@ class OpenAIParser:
         state = ParserState(known_characters=set(
             self.default_known_characters))
         all_dialogues: List[Dict[str, Any]] = []
+        per_chunk_dialogues: List[List[Dict[str, Any]]] = []
         ambiguities: List[Dict[str, Any]] = []
 
         for idx, ch in enumerate(chunks):
+            if idx == len(chunks) - 1:
+                print(
+                    "\n===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT BEGIN =====", flush=True)
+                try:
+                    print(ch.text, flush=True)
+                except Exception:
+                    print("[EOD] <failed to print chunk text>", flush=True)
+                print(
+                    "===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT END =====\n", flush=True)
             summary = self._state_summary(state)
             system_prompt = build_system_prompt(self.allowed_emotions, list(
                 state.known_characters), self.include_narration, summary)
@@ -267,6 +419,16 @@ class OpenAIParser:
                         raw_output, suffix=f"_chunk{idx+1}")
                 self._cache[cache_key] = raw_output
 
+            if idx == len(chunks) - 1:
+                print(
+                    "\n===== [EOD][OPENAI_RAW] LAST CHUNK RAW BEGIN (first 60 lines) =====", flush=True)
+                try:
+                    for i, ln in enumerate((raw_output or "").splitlines()[:60], start=1):
+                        print(f"{i:02d}: {ln}", flush=True)
+                except Exception:
+                    print("[EOD] <failed to print raw output>", flush=True)
+                print(
+                    "===== [EOD][OPENAI_RAW] LAST CHUNK RAW END =====\n", flush=True)
             items = self._parse_jsonl(raw_output)
             if not items:
                 # Retry once with stricter reminder
@@ -292,6 +454,12 @@ class OpenAIParser:
                     })
 
             fixed, warnings = self._validate_and_fix(items, warnings, state)
+            # Tag source for DIAG
+            for _ln in fixed:
+                try:
+                    _ln.setdefault("_src", "ai")
+                except Exception:
+                    pass
 
             # --- Fallback detection and correction (batch) ---
             try:
@@ -299,6 +467,44 @@ class OpenAIParser:
                     ch.text, fixed)
                 print(
                     f"[DEBUG] Fallback detection: {len(problem_segments)} segment(s) found", flush=True)
+                if idx == len(chunks) - 1:
+                    try:
+                        print(
+                            f"[EOD][FB] segments_detected={len(problem_segments)} (last chunk)", flush=True)
+                    except Exception:
+                        pass
+                # --- EOD fallback safety filter ---
+                is_last_chunk = (idx == len(chunks) - 1)
+                if is_last_chunk and problem_segments:
+                    filtered_segments = []
+                    sim_threshold = 0.5 if is_last_chunk else 0.6
+                    for seg in problem_segments:
+                        seg_txt = (seg.get("text", "") or "").strip()
+                        sim = 0.0
+                        if seg_txt:
+                            try:
+                                sim = max(
+                                    (_token_similarity(seg_txt, s)
+                                     for s in ch.text.splitlines() if s.strip()),
+                                    default=0.0,
+                                )
+                            except Exception:
+                                sim = 0.0
+                        if sim >= sim_threshold or len(seg_txt.split()) >= 4:
+                            filtered_segments.append(seg)
+                        else:
+                            print(
+                                f"[DIAG][FB_FILTER] Skipping weak EOD segment '{seg_txt}' (sim={sim:.2f})", flush=True)
+                    problem_segments = filtered_segments
+                    if len(problem_segments) > 3:
+                        print(
+                            f"[WARN][FB] Excessive fallback segments ({len(problem_segments)}) — merging into a single consolidated fallback request.", flush=True)
+                        merged_text = " ".join(seg.get("text", "")
+                                               for seg in problem_segments[:15])
+                        problem_segments = [{"text": merged_text}]
+                        self._eod_fallback_throttled = True
+                    else:
+                        self._eod_fallback_throttled = False
                 # [DIAG] validation: REJECTED present but no detected segments
                 if not problem_segments and any(
                     d.get("character") == "REJECTED" for d in fixed
@@ -314,6 +520,13 @@ class OpenAIParser:
             if problem_segments:
                 for _seg_i, seg in enumerate(problem_segments, start=1):
                     try:
+                        if idx == len(chunks) - 1:
+                            print(
+                                "\n----- [EOD][FB] Segment DETECTED (last chunk) -----", flush=True)
+                            print(
+                                f"[EOD][FB] seg#{_seg_i} kind={seg.get('kind','missing')} start_idx={seg.get('start_idx')} end_idx={seg.get('end_idx')}", flush=True)
+                            print(
+                                f"[EOD][FB] segment_text (first 300): {(seg.get('text','') or '')[:300]}", flush=True)
                         try:
                             print(
                                 f"[DIAG] Known chars before fallback: {sorted(list(state.known_characters))[:20]}", flush=True)
@@ -330,6 +543,15 @@ class OpenAIParser:
                             system_prompt, seg.get("text", ""), known_characters=list(state.known_characters or []))
                         print(
                             f"[DEBUG] Fallback raw returned length={len(fb_raw)}", flush=True)
+                        if idx == len(chunks) - 1:
+                            print(
+                                "----- [EOD][FB] RAW Friendli OUT (first 30 lines) -----", flush=True)
+                            try:
+                                for j, ln in enumerate((fb_raw or '').splitlines()[:30], start=1):
+                                    print(f"{j:02d}: {ln}", flush=True)
+                            except Exception:
+                                print(
+                                    "[EOD] <failed to print friendli raw>", flush=True)
                         try:
                             _fb_lines_preview = (fb_raw or "").splitlines()[:2]
                             print(
@@ -355,6 +577,44 @@ class OpenAIParser:
                             f"[DEBUG] Fallback parsed {len(fb_lines)} line(s)", flush=True)
                         fb_valid, warnings = self._validate_and_fix(
                             fb_lines, warnings, state)
+                        # --- Localized fuzzy validation against segment text + intra-response dedup ---
+                        segment_text = seg.get("text", "") or ""
+                        segment_clean = _extract_quotes(segment_text)
+                        validated_fb: List[Dict[str, Any]] = []
+                        dropped_fb: List[Tuple[str, float]] = []
+                        for i_fb, fb_line in enumerate(fb_valid):
+                            fb_txt = fb_line.get("text", "")
+                            sim_loc = _fuzzy_sim(fb_txt, segment_clean)
+                            if sim_loc >= 0.5:
+                                validated_fb.append(fb_line)
+                            else:
+                                dropped_fb.append((fb_txt, sim_loc))
+                        kept_final: List[Dict[str, Any]] = []
+                        for fb_line in validated_fb:
+                            fb_txt = fb_line.get("text", "")
+                            overlap = False
+                            for kept in kept_final:
+                                sim2 = _fuzzy_sim(fb_txt, kept.get("text", ""))
+                                if sim2 > 0.7:
+                                    overlap = True
+                                    dropped_fb.append((fb_txt, sim2))
+                                    break
+                            if not overlap:
+                                kept_final.append(fb_line)
+                        fb_valid = kept_final
+                        print(
+                            f"[EOD][FB_SUMMARY] After fuzzy filter (quote-normalized): kept={len(fb_valid)}, dropped={len(dropped_fb)}", flush=True)
+                        for _txt, _sim in dropped_fb[:3]:
+                            print(
+                                f"[DIAG][FB_DROP] sim={_sim:.2f} text={_txt[:80]!r}", flush=True)
+                        for _ln in fb_valid:
+                            try:
+                                _ln.setdefault("_src", "fb")
+                            except Exception:
+                                pass
+                        if idx == len(chunks) - 1:
+                            print(
+                                f"[EOD][FB] validated_and_kept={len(fb_valid)} line(s) for seg#{_seg_i}", flush=True)
                         print(
                             f"[DEBUG] Fallback validated {len(fb_valid)} line(s)", flush=True)
                         # [DIAG] unknown speakers produced by fallback
@@ -368,6 +628,13 @@ class OpenAIParser:
                                     _txt = (_ln.get("text", "") or "")[:80]
                                     print(
                                         f"[DIAG][UNKNOWN_SPEAKER] '{ch_name}' text='{_txt}' (allowed_size={len(allowed)})", flush=True)
+                                    _unknown_count += 1
+                            if idx == len(chunks) - 1:
+                                try:
+                                    print(
+                                        f"[EOD][FB] unknown_speakers={_unknown_count}", flush=True)
+                                except Exception:
+                                    pass
                         except Exception:
                             _unknown_count = 0
                         _seg_len = len(_seg_text)
@@ -380,6 +647,9 @@ class OpenAIParser:
                         })
                         replace_or_insert_lines(fixed, seg.get("start_idx", 0), fb_valid, seg.get(
                             "end_idx", seg.get("start_idx", 0)))
+                        if is_last_chunk:
+                            print(
+                                f"[EOD][FB_SUMMARY] After filtering: kept={len(fb_valid)} lines for last chunk.", flush=True)
                     except Exception as _fe:
                         print(
                             f"[DEBUG] Fallback error ignored: {_fe}", flush=True)
@@ -413,6 +683,11 @@ class OpenAIParser:
                                 self._preclean_jsonl(fb_raw))
                             fb_valid, warnings = self._validate_and_fix(
                                 fb_lines, warnings, state)
+                            for _ln in fb_valid:
+                                try:
+                                    _ln.setdefault("_src", "fb")
+                                except Exception:
+                                    pass
                             replace_or_insert_lines(
                                 fixed,
                                 seg.get("start_idx", 0),
@@ -430,10 +705,17 @@ class OpenAIParser:
                             continue
                 else:
                     print("[DEBUG] No fallback needed for this chunk", flush=True)
+            # store per-chunk parsed lines (post-fallback and validation)
+            per_chunk_dialogues.append(list(fixed))
             all_dialogues.extend(fixed)
 
         # Deduplicate overlapping outputs
-        all_dialogues = deduplicate_lines(all_dialogues)
+        # Boundary de-duplication across chunk edges, then standard dedup
+        try:
+            merged_parsed_lines = _dedupe_chunk_boundaries(per_chunk_dialogues)
+        except Exception:
+            merged_parsed_lines = list(all_dialogues)
+        all_dialogues = deduplicate_lines(merged_parsed_lines)
 
         # Reconcile adjacent same-speaker lines
         reconciled: List[Dict[str, Any]] = []
@@ -504,7 +786,18 @@ class OpenAIParser:
             to_reinject: List[str] = []
             for a, b in groups:
                 length = b - a + 1
-                if (not self.REINJECT_STRICT) or length >= 2:
+                # Allow single short narrative reinjection if under 12 tokens
+                sent_texts = [si["text"]
+                              for si in sent_infos if a <= si["index"] <= b]
+                avg_tokens = sum(len(t.split())
+                                 for t in sent_texts) / max(1, len(sent_texts))
+                if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
+                    if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
+                        try:
+                            print(
+                                f"[DIAG][REINJECT] single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
+                        except Exception:
+                            pass
                     for si in sent_infos:
                         if a <= si["index"] <= b:
                             to_reinject.append(si["text"])
@@ -523,6 +816,7 @@ class OpenAIParser:
                     "emotions": ["neutral", "calm"],
                     "text": m,
                     "id": f"reinjected-{abs(hash(m))}",
+                    "_src": "reinj",
                 })
                 try:
                     _samples = [d.get("text", "") for d in reconciled[:2]]
@@ -541,6 +835,22 @@ class OpenAIParser:
             except Exception:
                 pass
             pass
+
+        # Print final reconciled tail for last 20 lines (pre-REJECTED-purge)
+        if True:
+            try:
+                tail = reconciled[-20:] if len(
+                    reconciled) > 20 else reconciled[:]
+                print(
+                    "\n===== [EOD][TAIL] FINAL RECONCILED LAST 20 LINES (pre-REJECTED-purge) =====", flush=True)
+                for k, d in enumerate(tail, start=max(1, len(reconciled)-len(tail)+1)):
+                    ch_name = d.get('character', '')
+                    txt = (d.get('text', '') or '')[:180]
+                    src = d.get('_src', '?')
+                    print(f"{k:03d}. [{src}] {ch_name}: {txt}", flush=True)
+                print("===== [EOD][TAIL] END =====\n", flush=True)
+            except Exception:
+                print("[EOD] <failed to print reconciled tail>", flush=True)
 
         # Final purge of REJECTED lines before formatting
         try:
@@ -584,6 +894,17 @@ class OpenAIParser:
             for _i, (_txt, _a, _b) in enumerate((_conf or [])[:3], start=1):
                 print(
                     f"[DIAG]   #{_i}: '{_txt[:80]}' A={_a} B={_b}", flush=True)
+            try:
+                last_fb_calls = [r for r in (
+                    _diag_fb_calls or []) if r.get("chunk") == len(chunks)]
+                _last_inserted = sum(int(r.get("parsed") or 0)
+                                     for r in last_fb_calls)
+                _last_unknown = sum(int(r.get("unknown") or 0)
+                                    for r in last_fb_calls)
+                print(
+                    f"[EOD][SUMMARY] last_chunk_fallback_calls={len(last_fb_calls)} inserted={_last_inserted} unknown_speakers={_last_unknown}", flush=True)
+            except Exception:
+                pass
             print("[DIAG] ===============================", flush=True)
         except Exception:
             pass
@@ -593,12 +914,42 @@ class OpenAIParser:
                            src="parsers/openai_parser.py:convert")
         except Exception:
             pass
+        # --- End unified debug capture ---
+        try:
+            sys.stdout = _original_stdout
+            sys.stderr = _original_stderr
+            with open(log_path, "w", encoding="utf-8") as _f:
+                _f.write(_dual_logger.get_value())
+            print(
+                f"[LOG_END] Full parser debug log saved to {log_path}", flush=True)
+        except Exception as _le:
+            try:
+                _original_stdout.write(
+                    f"[LOG_ERROR] Failed to save debug log: {_le}\n")
+            except Exception:
+                pass
         return RawParseResult("\n".join(formatted_lines), reconciled, stats, ambiguities, warnings, errors)
 
     def _line_key(self, it: Dict[str, Any]) -> str:
         return hashlib.sha256(f"{(it.get('character') or '').strip().lower()}|{(it.get('text') or '').strip()}".encode("utf-8")).hexdigest()
 
     def convert_streaming(self, raw_text: str):
+        # --- Start unified debug capture ---
+        log_dir = Path("logs")
+        try:
+            log_dir.mkdir(exist_ok=True)
+        except Exception:
+            pass
+        ts = datetime.datetime.utcnow().strftime("%Y-%m-%d_%H%M%S")
+        log_path = log_dir / f"parser_run_{ts}.txt"
+
+        _original_stdout = sys.stdout
+        _original_stderr = sys.stderr
+        _dual_logger = DualLogger(sys.stdout)
+        sys.stdout = _dual_logger
+        sys.stderr = _dual_logger
+        print(f"[LOG_START] Parser debug capture started ({ts})", flush=True)
+
         warnings: List[str] = []
         errors: List[str] = []
         if not raw_text or not raw_text.strip():
@@ -651,6 +1002,24 @@ class OpenAIParser:
 
                 print(
                     f">>> Got response (chars={len(raw_output)})", flush=True)
+                if idx == total - 1:
+                    print(
+                        "\n===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT BEGIN =====", flush=True)
+                    try:
+                        print(ch.text, flush=True)
+                    except Exception:
+                        print("[EOD] <failed to print chunk text>", flush=True)
+                    print(
+                        "===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT END =====\n", flush=True)
+                    print(
+                        "\n===== [EOD][OPENAI_RAW] LAST CHUNK RAW BEGIN (first 60 lines) =====", flush=True)
+                    try:
+                        for i, ln in enumerate((raw_output or "").splitlines()[:60], start=1):
+                            print(f"{i:02d}: {ln}", flush=True)
+                    except Exception:
+                        print("[EOD] <failed to print raw output>", flush=True)
+                    print(
+                        "===== [EOD][OPENAI_RAW] LAST CHUNK RAW END =====\n", flush=True)
                 items = self._parse_jsonl(raw_output)
                 print(f">>> Parsed {len(items)} items", flush=True)
                 if not items:
@@ -682,6 +1051,12 @@ class OpenAIParser:
 
                 fixed, warnings = self._validate_and_fix(
                     items, warnings, state)
+                # Tag source for DIAG
+                for _ln in fixed:
+                    try:
+                        _ln.setdefault("_src", "ai")
+                    except Exception:
+                        pass
 
                 # --- Fallback detection and correction (streaming) ---
                 try:
@@ -694,6 +1069,38 @@ class OpenAIParser:
                     ):
                         print(
                             "[DIAG] WARNING: REJECTED present but detection found 0 segments.", flush=True)
+                    # --- EOD fallback safety filter (streaming) ---
+                    is_last_chunk = (idx == total - 1)
+                    if is_last_chunk and problem_segments:
+                        filtered_segments = []
+                        sim_threshold = 0.5 if is_last_chunk else 0.6
+                        for seg in problem_segments:
+                            seg_txt = (seg.get("text", "") or "").strip()
+                            sim = 0.0
+                            if seg_txt:
+                                try:
+                                    sim = max(
+                                        (_token_similarity(seg_txt, s)
+                                         for s in ch.text.splitlines() if s.strip()),
+                                        default=0.0,
+                                    )
+                                except Exception:
+                                    sim = 0.0
+                            if sim >= sim_threshold or len(seg_txt.split()) >= 4:
+                                filtered_segments.append(seg)
+                            else:
+                                print(
+                                    f"[DIAG][FB_FILTER] Skipping weak EOD segment '{seg_txt}' (sim={sim:.2f})", flush=True)
+                        problem_segments = filtered_segments
+                        if len(problem_segments) > 3:
+                            print(
+                                f"[WARN][FB] Excessive fallback segments ({len(problem_segments)}) — merging into a single consolidated fallback request.", flush=True)
+                            merged_text = " ".join(
+                                seg.get("text", "") for seg in problem_segments[:15])
+                            problem_segments = [{"text": merged_text}]
+                            self._eod_fallback_throttled = True
+                        else:
+                            self._eod_fallback_throttled = False
                 except Exception as e:
                     problem_segments = []
                     try:
@@ -708,6 +1115,13 @@ class OpenAIParser:
                 if problem_segments:
                     for _seg_i, seg in enumerate(problem_segments, start=1):
                         try:
+                            if idx == total - 1:
+                                print(
+                                    "\n----- [EOD][FB] Segment DETECTED (last chunk) -----", flush=True)
+                                print(
+                                    f"[EOD][FB] seg#{_seg_i} kind={seg.get('kind','missing')} start_idx={seg.get('start_idx')} end_idx={seg.get('end_idx')}", flush=True)
+                                print(
+                                    f"[EOD][FB] segment_text (first 300): {(seg.get('text','') or '')[:300]}", flush=True)
                             try:
                                 print(
                                     f"[DIAG] Known chars before fallback: {sorted(list(state.known_characters))[:20]}", flush=True)
@@ -724,6 +1138,15 @@ class OpenAIParser:
                                 system_prompt, seg.get("text", ""), known_characters=list(state.known_characters or []))
                             print(
                                 f"[DEBUG] Fallback raw returned length={len(fb_raw)}", flush=True)
+                            if idx == total - 1:
+                                print(
+                                    "----- [EOD][FB] RAW Friendli OUT (first 30 lines) -----", flush=True)
+                                try:
+                                    for j, ln in enumerate((fb_raw or '').splitlines()[:30], start=1):
+                                        print(f"{j:02d}: {ln}", flush=True)
+                                except Exception:
+                                    print(
+                                        "[EOD] <failed to print friendli raw>", flush=True)
                             try:
                                 _fb_lines_preview = (
                                     fb_raw or "").splitlines()[:2]
@@ -749,6 +1172,45 @@ class OpenAIParser:
                                 f"[DEBUG] Fallback parsed {len(fb_lines)} line(s)", flush=True)
                             fb_valid, warnings = self._validate_and_fix(
                                 fb_lines, warnings, state)
+                            # --- Localized fuzzy validation against segment text + intra-response dedup (streaming) ---
+                            segment_text = seg.get("text", "") or ""
+                            segment_clean = _extract_quotes(segment_text)
+                            validated_fb: List[Dict[str, Any]] = []
+                            dropped_fb: List[Tuple[str, float]] = []
+                            for i_fb, fb_line in enumerate(fb_valid):
+                                fb_txt = fb_line.get("text", "")
+                                sim_loc = _fuzzy_sim(fb_txt, segment_clean)
+                                if sim_loc >= 0.5:
+                                    validated_fb.append(fb_line)
+                                else:
+                                    dropped_fb.append((fb_txt, sim_loc))
+                            kept_final: List[Dict[str, Any]] = []
+                            for fb_line in validated_fb:
+                                fb_txt = fb_line.get("text", "")
+                                overlap = False
+                                for kept in kept_final:
+                                    sim2 = _fuzzy_sim(
+                                        fb_txt, kept.get("text", ""))
+                                    if sim2 > 0.7:
+                                        overlap = True
+                                        dropped_fb.append((fb_txt, sim2))
+                                        break
+                                if not overlap:
+                                    kept_final.append(fb_line)
+                            fb_valid = kept_final
+                            print(
+                                f"[EOD][FB_SUMMARY] After fuzzy filter (quote-normalized): kept={len(fb_valid)}, dropped={len(dropped_fb)}", flush=True)
+                            for _txt, _sim in dropped_fb[:3]:
+                                print(
+                                    f"[DIAG][FB_DROP] sim={_sim:.2f} text={_txt[:80]!r}", flush=True)
+                            for _ln in fb_valid:
+                                try:
+                                    _ln.setdefault("_src", "fb")
+                                except Exception:
+                                    pass
+                            if idx == total - 1:
+                                print(
+                                    f"[EOD][FB] validated_and_kept={len(fb_valid)} line(s) for seg#{_seg_i}", flush=True)
                             print(
                                 f"[DEBUG] Fallback validated {len(fb_valid)} line(s)", flush=True)
                             try:
@@ -764,12 +1226,19 @@ class OpenAIParser:
                                 pass
                             replace_or_insert_lines(fixed, seg.get("start_idx", 0), fb_valid, seg.get(
                                 "end_idx", seg.get("start_idx", 0)))
+                            if is_last_chunk:
+                                print(
+                                    f"[EOD][FB_SUMMARY] After filtering: kept={len(fb_valid)} lines for last chunk.", flush=True)
                         except Exception as _fe:
                             print(
                                 f"[DEBUG] Fallback error ignored: {_fe}", flush=True)
                             continue
                 else:
                     if any(d.get("character", "").upper() == "REJECTED" for d in fixed):
+                        if getattr(self, "_eod_fallback_throttled", False):
+                            print(
+                                "[INFO][FB] Skipping forced fallback; throttle already engaged.", flush=True)
+                            return
                         print(
                             "[DIAG] Force-calling fallback for REJECTED-only chunk (streaming).", flush=True)
                         seg_text = (ch.text or "").strip(
@@ -860,7 +1329,18 @@ class OpenAIParser:
                         groups.append((start, prev))
                     for a, b in groups:
                         length = b - a + 1
-                        if (not self.REINJECT_STRICT) or length >= 2:
+                        # Allow single short narrative reinjection if under 12 tokens
+                        sent_texts = [si["text"]
+                                      for si in sent_infos if a <= si["index"] <= b]
+                        avg_tokens = sum(len(t.split())
+                                         for t in sent_texts) / max(1, len(sent_texts))
+                        if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
+                            if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
+                                try:
+                                    print(
+                                        f"[DIAG][REINJECT] (streaming) single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
+                                except Exception:
+                                    pass
                             for si in sent_infos:
                                 if a <= si["index"] <= b:
                                     filtered.append({
@@ -868,6 +1348,7 @@ class OpenAIParser:
                                         "emotions": ["neutral", "calm"],
                                         "text": si["text"],
                                         "id": f"reinjected-{abs(hash(si['text']))}",
+                                        "_src": "reinj",
                                     })
                                     reinjected += 1
                                     try:
@@ -894,6 +1375,21 @@ class OpenAIParser:
                 except Exception:
                     pass
 
+                if idx == total - 1:
+                    try:
+                        tail = filtered[-20:] if len(
+                            filtered) > 20 else filtered[:]
+                        print(
+                            "\n===== [EOD][TAIL] FINAL RECONCILED LAST 20 LINES (pre-REJECTED-purge/stream) =====", flush=True)
+                        for k, d in enumerate(tail, start=max(1, len(filtered)-len(tail)+1)):
+                            ch_name = d.get('character', '')
+                            txt = (d.get('text', '') or '')[:180]
+                            src = d.get('_src', '?')
+                            print(
+                                f"{k:03d}. [{src}] {ch_name}: {txt}", flush=True)
+                        print("===== [EOD][TAIL] END =====\n", flush=True)
+                    except Exception:
+                        print("[EOD] <failed to print reconciled tail>", flush=True)
                 print(
                     f">>> Yielding chunk {idx+1}/{total}: dialogues={len(filtered)}, ambiguities={len(chunk_ambs)}", flush=True)
                 # record per-chunk duration and token count
@@ -923,6 +1419,20 @@ class OpenAIParser:
                 print(f">>> Wrote parser timings/tokens: [{line}]", flush=True)
             except Exception as _e:
                 print(f">>> Failed to write parser timings: {_e}", flush=True)
+            # --- End unified debug capture ---
+            try:
+                sys.stdout = _original_stdout
+                sys.stderr = _original_stderr
+                with open(Path("logs") / f"parser_run_{ts}.txt", "w", encoding="utf-8") as _f:
+                    _f.write(_dual_logger.get_value())
+                print(
+                    f"[LOG_END] Full parser debug log saved to logs/parser_run_{ts}.txt", flush=True)
+            except Exception as _le:
+                try:
+                    _original_stdout.write(
+                        f"[LOG_ERROR] Failed to save debug log: {_le}\n")
+                except Exception:
+                    pass
 
     def finalize_stream(self, dialogues: List[Dict[str, Any]], include_narration: Optional[bool] = None) -> RawParseResult:
         inc = self.include_narration if include_narration is None else include_narration
