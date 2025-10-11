@@ -1,0 +1,34 @@
+[LOG_START] Parser debug capture started (2025-10-10_043107)
+>>> Building chunks (input chars=49)
+>>> Built 1 chunks
+>>> Starting chunk 1/1 (approx tokens=13)
+>>> Calling OpenAI…
+[progress] chunk=1, tokens=13, est_seconds=100.0, steps=100, per_step=1.000, start=0, target=100
+>>> OpenAI responded in 19515 ms (chars=157)
+>>> Got response (chars=157)
+
+===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT BEGIN =====
+"Run!" he shouted, then sprinted across the yard.
+===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT END =====
+
+
+===== [EOD][OPENAI_RAW] LAST CHUNK RAW BEGIN (first 60 lines) =====
+01: {"character":"He","emotions":["angry","dominant"],"text":"Run!"}
+02: {"character":"Narrator","emotions":["neutral","calm"],"text":"He sprinted across the yard."}
+===== [EOD][OPENAI_RAW] LAST CHUNK RAW END =====
+
+>>> Parsed 2 items
+[DIAG] detect_missing_or_rejected_lines() received 2 lines with 0 REJECTED
+[DEBUG] Detection: missing_groups=0 rejected_mapped=0 (total=0)
+[DEBUG] Fallback overlap filtered: 0 skipped (REJECTED kept 0)
+[DEBUG] Fallback detection: 0 segment(s) found
+[DEBUG] No fallback needed for this chunk
+[DIAG] Streaming reinjection: considered=1
+
+===== [EOD][TAIL] FINAL RECONCILED LAST 20 LINES (pre-REJECTED-purge/stream) =====
+001. [ai] He: Run!
+002. [ai] Narrator: He sprinted across the yard.
+===== [EOD][TAIL] END =====
+
+>>> Yielding chunk 1/1: dialogues=2, ambiguities=0
+>>> Wrote parser timings/tokens: [19.51 (13)]

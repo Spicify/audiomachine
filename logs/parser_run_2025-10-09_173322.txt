@@ -1,0 +1,73 @@
+[LOG_START] Parser debug capture started (2025-10-09_173322)
+>>> Building chunks (input chars=60)
+>>> Built 1 chunks
+>>> Starting chunk 1/1 (approx tokens=16)
+>>> Calling OpenAI…
+[progress] chunk=1, tokens=16, est_seconds=100.0, steps=100, per_step=1.000, start=0, target=100
+>>> OpenAI responded in 17672 ms (chars=233)
+>>> Got response (chars=233)
+
+===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT BEGIN =====
+He smiled. "You're mine," he whispered. Then he turned away.
+===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT END =====
+
+
+===== [EOD][OPENAI_RAW] LAST CHUNK RAW BEGIN (first 60 lines) =====
+01: {"character":"Narrator","emotions":["neutral","calm"],"text":"He smiled."}
+02: {"character":"He","emotions":["soft","breathless"],"text":"You're mine."}
+03: {"character":"Narrator","emotions":["neutral","calm"],"text":"Then he turned away."}
+===== [EOD][OPENAI_RAW] LAST CHUNK RAW END =====
+
+>>> Parsed 3 items
+[DIAG][SIM] missing segment detected by token similarity (no match ≥0.6): 'you're mine," he whispered.'
+[DIAG] detect_missing_or_rejected_lines() received 3 lines with 0 REJECTED
+[DEBUG] Detection: missing_groups=1 rejected_mapped=0 (total=1)
+[DEBUG] Fallback overlap filtered: 0 skipped (REJECTED kept 0)
+[DEBUG] Fallback detection: 1 segment(s) found
+
+----- [EOD][FB] Segment DETECTED (last chunk) -----
+[EOD][FB] seg#1 kind=missing start_idx=1 end_idx=1
+[EOD][FB] segment_text (first 300): "You're mine," he whispered.
+[DIAG] Known chars before fallback: ['Adam (Family)', 'Adam (Supporting)', 'Adam Stone', 'Alexandra', 'Allison', 'Arabella', 'Aria', 'Astro', 'Boyd', 'Brad', 'Brian', 'Brittney', 'Burt Reynolds', 'Carter', 'Christian', 'Clara', 'Clara (Secondary)', 'Cornelius', 'Dad', 'Dante']
+[DIAG] Last speaker: He
+[DIAG] Fallback segment text (len=28): "You're mine," he whispered.
+[DIAG] Passing known_characters to fallback: True
+[DEBUG] Frendli token loaded: True
+[DEBUG] FRIENDLI_TOKEN found: True
+[DEBUG] Friendli client base_url: https://api.friendli.ai/serverless/v1/
+[DEBUG] Frendli request URL verified
+[DIAG] Friendli system prompt (first 12 lines):
+[DIAG]   01: You are a strict audiobook dialogue parser.
+[DIAG]   02: Output MUST be JSON Lines (JSONL). One JSON object per line with keys: character, emotions (2 strings), text. Optional: candidates (2–5 strings) only when character == 'Ambiguous'.
+[DIAG]   03: No extra text, no commentary, no blank lines.
+[DIAG]   04: Do NOT invent new character names under any circumstances.
+[DIAG]   05: If the speaker is unclear, use 'Ambiguous' and choose candidates ONLY from Known characters.
+[DIAG]   06: Coverage: Do NOT skip any input sentence.
+[DIAG]   07: If speaker unclear → use 'Ambiguous' with 2–5 candidates from known characters.
+[DIAG]   08: Narration: Use 'Narrator' for objective, third-person description (not tied to any POV).
+[DIAG]   09: Quotes: The text field must contain ONLY the spoken words inside quotes (drop attributions like 'he growled').
+[DIAG]   10: When quotes include attribution verbs (e.g., said, asked, whispered, commanded, moaned, murmured, replied), exclude those verbs from the 'text' (keep only the words inside quotes).
+[DIAG]   11: Speaker inference: When a quoted dialogue appears after a character’s name or pronoun (e.g., Mark said, '…' or he whispered, '…'), infer that character as the speaker of the quoted text.
+[DIAG]   12: Emotions: Exactly TWO per line; if none, use ['neutral','calm'].
+[DIAG] Known characters empty: False; Has 'Do NOT invent names' clause: True
+[DEBUG] Frendli request begin
+[DEBUG] Frendli request end (1781 ms, chars=214)
+[DEBUG] Fallback raw returned length=214
+----- [EOD][FB] RAW Friendli OUT (first 30 lines) -----
+01: {"character":"Ambiguous","emotions":["neutral","calm"],"candidates":["Adam (Family)", "Brad","Burt Reynolds","Carter","Christian","Declan","David","David","Mark","Matthew","Soothing Narrator"],"text":"You're mine"}
+[DIAG] Fallback RAW (first 2 lines): ['{"character":"Ambiguous","emotions":["neutral","calm"],"candidates":["Adam (Family)", "Brad","Burt Reynolds","Carter","Christian","Declan","David","David","Mark","Matthew","Soothing Narrator"],"text":"You\'re mine"}']
+[DEBUG] Fallback parsed 1 line(s)
+[DEBUG] Fallback error ignored: cannot access local variable '_extract_quotes' where it is not associated with a value
+[DIAG] Streaming reinjection: considered=3
+[DIAG][REINJECT] (streaming) single-line reinjection enabled (avg_tokens=4.0) span=[1:1]
+[DIAG] Streaming reinjected (strict): '"You're mine," he whispered.' | samples=['He smiled.', "You're mine."]
+
+===== [EOD][TAIL] FINAL RECONCILED LAST 20 LINES (pre-REJECTED-purge/stream) =====
+001. [ai] Narrator: He smiled.
+002. [ai] He: You're mine.
+003. [ai] Narrator: Then he turned away.
+004. [reinj] Narrator: "You're mine," he whispered.
+===== [EOD][TAIL] END =====
+
+>>> Yielding chunk 1/1: dialogues=4, ambiguities=0
+>>> Wrote parser timings/tokens: [17.67 (16)]

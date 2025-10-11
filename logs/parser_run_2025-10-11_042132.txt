@@ -1,0 +1,219 @@
+[LOG_START] Parser debug capture started (2025-10-11_042132)
+>>> Building chunks (input chars=5400)
+>>> Built 1 chunks
+>>> Starting chunk 1/1 (approx tokens=1294)
+>>> Calling OpenAI…
+[progress] chunk=1, tokens=1294, est_seconds=155.3, steps=100, per_step=1.553, start=0, target=100
+[session_logger] Uploaded projects/global/session_logs/2025-10-09T14-11-04Z.log (4039 bytes)
+[session_logger] Uploaded projects/global/session_logs/2025-10-09T14-11-04Z.log (5077 bytes)
+>>> OpenAI responded in 288703 ms (chars=11393)
+>>> Got response (chars=11393)
+
+===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT BEGIN =====
+A few hours later, they took her out. Aleksandr’s hand rested low on her waist. Mikhail’s arm slung around her shoulder. Every man who glanced her way was met with a warning glare. She felt it. The weight of their protectiveness. The power of their presence. And she loved it. By dessert, she was squirming. And they knew it. “You want to misbehave in public now?” Aleksandr murmured, lips at her ear. Mikhail smirked. “Or should we take you to the car and remind you who you belong to?” She shivered. But all she said, with a sly smile, was: 
+“Both.” And they knew it. Mikhail leaned in, voice low. “You’re aching for it, aren’t you?” She nodded, biting her lip. Aleksandr’s eyes darkened as he swirled his wine. “Then be a good girl… and wait.” But she wasn’t feeling obedient. Not tonight. Mikhail raised a slow brow. “What do you think you’re doing, kitten?” She blinked at him innocently. “Helping.” His jaw tightened as her hand moved, slow and teasing. “You’re playing a dangerous game, 
+kotenok.” She leaned in and whispered, “Then punish me.” He growled low in his throat, grabbed her wrist, and pressed a kiss to her knuckles like 
+nothing was wrong — for the public. But his grip was firm. Possessive. A silent warning. Aleksandr returned a moment later, and Mikhail calmly said, “She’s misbehaving. Isn't she 
+baby ?.” Aleksandr’s eyes dragged over her flushed cheeks, her smug little smile. “Oh, is she now?”Mikhail ads  
+He signaled for the car. Isabelle writhed against the cuffs, moaning softly, tugging at the bar holding her wide open. Dripping. Throbbing. Desperate. “Aleksandr…” she called, her voice breaking. No response. “Mikhail…” 
+Nothing but the sound of water and her own panting breaths. And then — after what felt like hours — footsteps. “Look at her,” Mikhail murmured. “Our filthy little kitten. Already soaked.” “Think she’s learned her lesson?” Aleksandr asked, dragging a finger through her folds, 
+making her wail. “Not yet,” Mikhail replied. “But we’ll make sure she does.” Aleksandr climbed onto the bed, kneeling between her spread thighs. “You begged for this, 
+baby. Tied open. On display. Waiting for us to devour you.” And then he thrust inside her. Hard. Deep. She screamed. Mikhail climbed up behind her, uncuffing her wrists just to pull her upright — her arms 
+wrapped around his neck, his cock rubbing against her lower back. “Take it,” he growled. “Take him. Take us.” Aleksandr drove into her mercilessly, hand gripping her throat, moaning every time she 
+clenched around him. “You feel that baby?” he snarled. “That’s what happens when you tease us in public.” Mikhail bit her shoulder, then slid inside her from behind — stretching her wide, filling her 
+completely, making her scream. “Look at you,” Aleksandr panted, his thumb sweeping over her lip. “Taking both of us like a 
+good girl. Perfect little slut for your men, aren’t you?” “Yes!” she cried as Mikhail thrust deeper. “Yes!” “Yes!” They worked her together — one pounding in while the other pulled back, then switching, 
+never letting her adjust, never letting her rest. The friction was exquisite, the pleasure almost 
+unbearable. Mikhail’s teeth found her neck as his hand slipped around, finding her clit and rubbing hard, 
+fast, knowing just how she needed it. “Come for us princess,” he demanded. “Right fucking now.” She shattered with a sob, her entire body trembling as they kept thrusting — deeper, harder 
+— drawing out every last wave of her release. When she finally stilled, boneless against them, Mikhail chuckled darkly. “Not done yet, 
+princess. Aleksandr hasn’t come.” “Not nearly done,” Aleksandr agreed, his grip bruising on her hips as he slammed into her. “Turn her. I want to feel her tight hole.” Mikhail pulled out, laying her down and uncuffing one ankle to flip her onto her stomach — then strapping her back in, legs still wide, helpless, exposed. Aleksandr thrust back inside 
+her with a groan. He looked fierce, possessive, utterly undone. “Mine,” he growled, punctuating the word with 
+a deep thrust. “Always mine.” He bent over her, kissing her roughly, his tongue dominating her mouth. Behind them, 
+Mikhail climbed back on the bed positioning himself at her face. “Suck,” he ordered. She obeyed, taking him deep, tasting herself on him. He gripped the headboard, thrusting 
+shallowly, careful not to choke her as Aleksandr continued to pound into her from behind. “Such a good girl,” Mikhail murmured, brushing a strand of hair from her face. “Taking us 
+both so well. Such a perfect little toy.” Aleksandr bit down on her shoulder as he came, his cock pulsing inside her. She moaned 
+around Mikhail’s cock, the vibration making him hiss. “Fuck baby ,” Mikhail ground out. “Perfect,” he growled, his fingers tangling in her hair. “Fucking perfect for us.” With a few more quick thrusts, he followed them over the edge, filling her mouth. She 
+swallowed, savoring every last drop before he pulled out and collapsed beside her. Aleksandr slid out gently, removing the cuffs and blindfold, and wrapped himself around her 
+from behind. Mikhail pressed close to her front, his hand splaying across her stomach. Mikhail kissed her eyes. “You okay kitten?” She nodded, breathless. “I’ve never felt more loved.” Mikhail cupped her face, wiping away tears and sweat. “You’re ours. Always.”
+===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT END =====
+
+
+===== [EOD][OPENAI_RAW] LAST CHUNK RAW BEGIN (first 60 lines) =====
+01: {"character":"Narrator","emotions":["calm","soft"],"text":"A few hours later, they took her out."}
+02: {"character":"Aleksandr","emotions":["dominant","confident"],"text":"Aleksandr’s hand rested low on her waist."}
+03: {"character":"Mikhail","emotions":["calm","confident"],"text":"Mikhail’s arm slung around her shoulder."}
+04: {"character":"Narrator","emotions":["cold","dominant"],"text":"Every man who glanced her way was met with a warning glare."}
+05: {"character":"Narrator","emotions":["calm","excited"],"text":"She felt it."}
+06: {"character":"Narrator","emotions":["calm","dominant"],"text":"The weight of their protectiveness."}
+07: {"character":"Narrator","emotions":["dominant","confident"],"text":"The power of their presence."}
+08: {"character":"Narrator","emotions":["happy","aroused"],"text":"And she loved it."}
+09: {"character":"Narrator","emotions":["breathy","aroused"],"text":"By dessert, she was squirming."}
+10: {"character":"Narrator","emotions":["confident","dominant"],"text":"And they knew it."}
+11: {"character":"Aleksandr","emotions":["teasing","dominant"],"text":"You want to misbehave in public now?"}
+12: {"character":"Aleksandr","emotions":["calm","whispers"],"text":"lips at her ear."}
+13: {"character":"Mikhail","emotions":["confident","teasing"],"text":"Mikhail smirked."}
+14: {"character":"Mikhail","emotions":["aggressive","dominant"],"text":"Or should we take you to the car and remind you who you belong to?"}
+15: {"character":"Isabelle","emotions":["shaky","breathless"],"text":"She shivered."}
+16: {"character":"Narrator","emotions":["teasing","calm"],"text":"But all she said, with a sly smile, was:"}
+17: {"character":"Isabelle","emotions":["flirty","confident"],"text":"Both."}
+18: {"character":"Narrator","emotions":["confident","dominant"],"text":"And they knew it."}
+19: {"character":"Mikhail","emotions":["calm","dominant"],"text":"Mikhail leaned in, voice low."}
+20: {"character":"Mikhail","emotions":["teasing","aroused"],"text":"You’re aching for it, aren’t you?"}
+21: {"character":"Isabelle","emotions":["innocent","flirty"],"text":"She nodded, biting her lip."}
+22: {"character":"Aleksandr","emotions":["dominant","calm"],"text":"Aleksandr’s eyes darkened as he swirled his wine."}
+23: {"character":"Aleksandr","emotions":["commanding","dominant"],"text":"Then be a good girl… and wait."}
+24: {"character":"Narrator","emotions":["confident","playful"],"text":"But she wasn’t feeling obedient."}
+25: {"character":"Narrator","emotions":["confident","calm"],"text":"Not tonight."}
+26: {"character":"Mikhail","emotions":["calm","confident"],"text":"Mikhail raised a slow brow."}
+27: {"character":"Mikhail","emotions":["teasing","dominant"],"text":"What do you think you’re doing, kitten?"}
+28: {"character":"Isabelle","emotions":["innocent","playful"],"text":"She blinked at him innocently."}
+29: {"character":"Isabelle","emotions":["innocent","playful"],"text":"Helping."}
+30: {"character":"Mikhail","emotions":["angry","dominant"],"text":"His jaw tightened as her hand moved, slow and teasing."}
+31: {"character":"Mikhail","emotions":["commanding","teasing"],"text":"You’re playing a dangerous game, kotenok."}
+32: {"character":"Isabelle","emotions":["breathy","begging"],"text":"She leaned in and whispered,"}
+33: {"character":"Isabelle","emotions":["breathy","begging"],"text":"Then punish me."}
+34: {"character":"Mikhail","emotions":["aggressive","dominant"],"text":"He growled low in his throat, grabbed her wrist, and pressed a kiss to her knuckles like nothing was wrong — for the public."}
+35: {"character":"Narrator","emotions":["cold","commanding"],"text":"But his grip was firm. Possessive. A silent warning."}
+36: {"character":"Aleksandr","emotions":["calm","confident"],"text":"Aleksandr returned a moment later."}
+37: {"character":"Mikhail","emotions":["calm","dominant"],"text":"She’s misbehaving. Isn't she \nbaby ?."}
+38: {"character":"Aleksandr","emotions":["dominant","confident"],"text":"Aleksandr’s eyes dragged over her flushed cheeks, her smug little smile."}
+39: {"character":"Aleksandr","emotions":["sarcastic","teasing"],"text":"Oh, is she now?"}
+40: {"character":"Mikhail","emotions":["calm","confident"],"text":"Mikhail ads"}
+41: {"character":"Ambiguous","emotions":["calm","commanding"],"candidates":["Mikhail","Aleksandr"],"text":"He signaled for the car."}
+42: {"character":"Isabelle","emotions":["moaning","aroused"],"text":"Isabelle writhed against the cuffs, moaning softly, tugging at the bar holding her wide open."}
+43: {"character":"Narrator","emotions":["aroused","pleading"],"text":"Dripping. Throbbing. Desperate."}
+44: {"character":"Isabelle","emotions":["pleading","breathless"],"text":"Aleksandr…"}
+45: {"character":"Narrator","emotions":["sad","cold"],"text":"No response."}
+46: {"character":"Isabelle","emotions":["pleading","breathless"],"text":"Mikhail…"}
+47: {"character":"Narrator","emotions":["calm","breathless"],"text":"Nothing but the sound of water and her own panting breaths."}
+48: {"character":"Narrator","emotions":["curious","calm"],"text":"And then — after what felt like hours — footsteps."}
+49: {"character":"Mikhail","emotions":["sarcastic","dominant"],"text":"Look at her,"}
+50: {"character":"Mikhail","emotions":["aroused","dominant"],"text":"Our filthy little kitten. Already soaked."}
+51: {"character":"REJECTED","emotions":["neutral","calm"],"text":"“Think she’s learned her lesson?” Aleksandr asked, dragging a finger through her folds, making her wail."}
+52: {"character":"Mikhail","emotions":["calm","dominant"],"text":"Not yet,"}
+53: {"character":"Mikhail","emotions":["aggressive","dominant"],"text":"But we’ll make sure she does."}
+54: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Aleksandr climbed onto the bed, kneeling between her spread thighs. “You begged for this, baby. Tied open. On display. Waiting for us to devour you.”"}
+55: {"character":"REJECTED","emotions":["neutral","calm"],"text":"And then he thrust inside her. Hard. Deep."}
+56: {"character":"Isabelle","emotions":["crying","shaky"],"text":"She screamed."}
+57: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Mikhail climbed up behind her, uncuffing her wrists just to pull her upright — her arms wrapped around his neck, his cock rubbing against her lower back."}
+58: {"character":"Mikhail","emotions":["aggressive","dominant"],"text":"Take it,"}
+59: {"character":"Mikhail","emotions":["aggressive","dominant"],"text":"Take him. Take us."}
+60: {"character":"REJECTED","emotions":["neutral","calm"],"text":"Aleksandr drove into her mercilessly, hand gripping her throat, moaning every time she clenched around him."}
+===== [EOD][OPENAI_RAW] LAST CHUNK RAW END =====
+
+>>> Parsed 97 items
+[DIAG] REJECTED line entering validator: “Think she’s learned her lesson?” Aleksandr asked, dragging 
+[DIAG] REJECTED line entering validator: Aleksandr climbed onto the bed, kneeling between her spread 
+[DIAG] REJECTED line entering validator: And then he thrust inside her. Hard. Deep.
+[DIAG] REJECTED line entering validator: Mikhail climbed up behind her, uncuffing her wrists just to 
+[DIAG] REJECTED line entering validator: Aleksandr drove into her mercilessly, hand gripping her thro
+[DIAG] REJECTED line entering validator: Mikhail bit her shoulder, then slid inside her from behind —
+[DIAG] REJECTED line entering validator: “Yes!” she cried as Mikhail thrust deeper. “Yes!”
+[DIAG] REJECTED line entering validator: “Yes!” They worked her together — one pounding in while the 
+[DIAG] REJECTED line entering validator: Mikhail’s teeth found her neck as his hand slipped around, f
+[DIAG] REJECTED line entering validator: She shattered with a sob, her entire body trembling as they 
+[DIAG] REJECTED line entering validator: “Not nearly done,” Aleksandr agreed, his grip bruising on he
+[DIAG] REJECTED line entering validator: “Turn her. I want to feel her tight hole.” Mikhail pulled ou
+[DIAG] REJECTED line entering validator: Aleksandr thrust back inside her with a groan. He looked fie
+[DIAG] REJECTED line entering validator: “Mine,” he growled, punctuating the word with a deep thrust.
+[DIAG] REJECTED line entering validator: Behind them, Mikhail climbed back on the bed positioning him
+[DIAG] REJECTED line entering validator: She obeyed, taking him deep, tasting herself on him.
+[DIAG] REJECTED line entering validator: He gripped the headboard, thrusting shallowly, careful not t
+[DIAG] REJECTED line entering validator: Aleksandr bit down on her shoulder as he came, his cock puls
+[DIAG] REJECTED line entering validator: With a few more quick thrusts, he followed them over the edg
+[DIAG][SIM] missing segment detected by token similarity (no match ≥0.6): 'aleksandr returned a moment later, and mikhail calmly said, "she's misbehaving.'
+[DIAG][SIM] missing segment detected by token similarity (no match ≥0.6): 'waiting for us to devour you." and then he thrust inside her.'
+[DIAG][SIM] missing segment detected by token similarity (no match ≥0.6): 'perfect little slut for your men, aren't you?" "yes!" she cried as mikhail thrus'
+[DIAG][SIM] missing segment detected by token similarity (no match ≥0.6): 'such a perfect little toy." aleksandr bit down on her shoulder as he came, his c'
+[DIAG] detect_missing_or_rejected_lines() received 97 lines with 19 REJECTED
+[DEBUG] Detection: missing_groups=4 rejected_mapped=18 (total=22)
+[DEBUG] Fallback overlap filtered: 0 skipped (REJECTED kept 18)
+[DEBUG] Fallback detection: 22 segment(s) found
+[WARN][FB] Excessive fallback segments (22) — merging into a single consolidated fallback request.
+
+----- [EOD][FB] Segment DETECTED (last chunk) -----
+[EOD][FB] seg#1 kind=missing start_idx=None end_idx=None
+[EOD][FB] segment_text (first 300): Aleksandr returned a moment later, and Mikhail calmly said, “She’s misbehaving. “Think she’s learned her lesson?” Aleksandr asked, dragging a finger through her folds, making her wail. Aleksandr climbed onto the bed, kneeling between her spread thighs. “You begged for this, baby. Tied open. On displ
+[DIAG] Known chars before fallback: ['Adam (Family)', 'Adam (Supporting)', 'Adam Stone', 'Aleksandr', 'Alexandra', 'Allison', 'Arabella', 'Aria', 'Astro', 'Boyd', 'Brad', 'Brian', 'Brittney', 'Burt Reynolds', 'Carter', 'Christian', 'Clara', 'Clara (Secondary)', 'Cornelius', 'Dad']
+[DIAG] Last speaker: Mikhail
+[DIAG] Fallback segment text (len=1713): Aleksandr returned a moment later, and Mikhail calmly said, “She’s misbehaving. “Think she’s learned her lesson?” Aleksandr asked, dragging a finger through her folds, making her wail. Aleksandr climbed onto the bed, kneeling between her spread thighs. “You begged for this, baby. Tied open. On displ
+[DIAG] Passing known_characters to fallback: True
+[DEBUG] Frendli token loaded: True
+[DEBUG] FRIENDLI_TOKEN found: True
+[DEBUG] Friendli client base_url: https://api.friendli.ai/serverless/v1/
+[DEBUG] Frendli request URL verified
+[DIAG] Friendli system prompt (first 12 lines):
+[DIAG]   01: You are a strict audiobook dialogue parser.
+[DIAG]   02: Output MUST be JSON Lines (JSONL). One JSON object per line with keys: character, emotions (2 strings), text. Optional: candidates (2–5 strings) only when character == 'Ambiguous'.
+[DIAG]   03: No extra text, no commentary, no blank lines.
+[DIAG]   04: Do NOT invent new character names under any circumstances.
+[DIAG]   05: If the speaker is unclear, use 'Ambiguous' and choose candidates ONLY from Known characters.
+[DIAG]   06: Coverage: Do NOT skip any input sentence.
+[DIAG]   07: If speaker unclear → use 'Ambiguous' with 2–5 candidates from known characters.
+[DIAG]   08: Narration: Use 'Narrator' for objective, third-person description (not tied to any POV).
+[DIAG]   09: Quotes: The text field must contain ONLY the spoken words inside quotes (drop attributions like 'he growled').
+[DIAG]   10: When quotes include attribution verbs (e.g., said, asked, whispered, commanded, moaned, murmured, replied), exclude those verbs from the 'text' (keep only the words inside quotes).
+[DIAG]   11: Speaker inference: When a quoted dialogue appears after a character’s name or pronoun (e.g., Mark said, '…' or he whispered, '…'), infer that character as the speaker of the quoted text.
+[DIAG]   12: Emotions: Exactly TWO per line; if none, use ['neutral','calm'].
+[DIAG] Known characters empty: False; Has 'Do NOT invent names' clause: True
+[DEBUG] Frendli request begin
+[DEBUG] Frendli request end (7468 ms, chars=3068)
+[DEBUG] Fallback raw returned length=3068
+----- [EOD][FB] RAW Friendli OUT (first 30 lines) -----
+01: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Aleksandr returned a moment later, and Mikhail calmly said"}
+02: {"character":"Mikhail","emotions":["contrived","content"],"text":"She’s misbehaving."}
+03: {"character":"Aleksandr","emotions":["dominant","thrilling"],"text":"Think she’s learned her lesson?"}
+04: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Aleksandr dragged a finger through her folds, making her wail."}
+05: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Aleksandr climbed onto the bed, kneeling between her spread thighs."}
+06: {"character":"Aleksandr","emotions":["dominant","thrilling"],"text":"You begged for this, baby. Tied open. On display. Waiting for us to devour you."}
+07: {"character":"Narrator","emotions":["dramatic","tense"],"text":"And then he thrust inside her. And then he thrust inside her. Hard. Deep."}
+08: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Mikhail climbed up behind her, uncuffing her wrists just to pull her upright — her arms wrapped around his neck, his cock rubbing against her lower back."}
+09: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Aleksandr drove into her mercilessly, hand gripping her throat, moaning every time she clenched around him."}
+10: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Mikhail bit her shoulder, then slid inside her from behind — stretching her wide, filling her completely, making her scream."}
+11: {"character":"Mikhail","emotions":["aroused","protective"],"text":"Perfect little slut for your men, aren’t you?"}
+12: {"character":"Ambiguous","emotions":["afflicted","pleasurable"],"candidates":["Aleksandr","Mikhail"],"text":"Yes!"}.
+13: {"character":"Narrator","emotions":["dramatic","tense"],"text":"They worked her together — one pounding in while the other pulled back, then switching, never letting her adjust, never letting her rest."}
+14: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Mikhail’s teeth found her neck as his hand slipped around, finding her clit and rubbing hard, fast, knowing just how she needed it."}
+15: {"character":"Narrator","emotions":["dramatic","tense"],"text":"She shattered with a sob, her entire body trembling as they kept thrusting — deeper, harder —  drawing out every last wave of her release."}
+16: {"character":"Aleksandr","emotions":["dominant","thrilling"],"text":"Not nearly done"}
+17: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Aleksandr’s grip bruising on her hips as he slammed into her."}
+18: {"character":"Aleksandr","emotions":["determined","commanding"],"text":"Turn her. I want to feel her tight hole."}
+19: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Mikhail pulled out, laying her down and uncuffing one ankle to flip her onto her stomach — then strapping her back in, legs still wide, helpless, exposed."}
+20: {"character":"Narrator","emotions":["dramatic","tense"],"text":"Aleksandr thrust back inside her with a groan."}
+21: {"character":"Narrator","emotions":["dramatic","tense"],"text":"He looked fierce, possessive, utterly undone."}
+[DIAG] Fallback RAW (first 2 lines): ['{"character":"Narrator","emotions":["dramatic","tense"],"text":"Aleksandr returned a moment later, and Mikhail calmly said"}', '{"character":"Mikhail","emotions":["contrived","content"],"text":"She’s misbehaving."}']
+[DEBUG] Fallback parsed 21 line(s)
+[DEBUG] Fallback error ignored: cannot access local variable '_extract_quotes' where it is not associated with a value
+[DIAG] Streaming reinjection: considered=91
+[DIAG][REINJECT] (streaming) single-line reinjection enabled (avg_tokens=11.0) span=[26:26]
+[DIAG] Streaming reinjected (strict): 'Aleksandr returned a moment later, and Mikhail calmly said, “She’s misbehaving.' | samples=['A few hours later, they took her out.', 'Aleksandr’s hand rested low on her waist.']
+[DIAG][REINJECT] (streaming) single-line reinjection enabled (avg_tokens=12.0) span=[45:45]
+[DIAG] Streaming reinjected (strict): 'Waiting for us to devour you.” And then he thrust inside her.' | samples=['A few hours later, they took her out.', 'Aleksandr’s hand rested low on her waist.']
+[DIAG] (streaming) Purged 19 residual REJECTED lines.
+
+===== [EOD][TAIL] FINAL RECONCILED LAST 20 LINES (pre-REJECTED-purge/stream) =====
+060. [ai] Mikhail: Come for us princess,
+061. [ai] Mikhail: Right fucking now.
+062. [ai] Mikhail: When she finally stilled, boneless against them, Mikhail chuckled darkly.
+063. [ai] Mikhail: Not done yet, princess. Aleksandr hasn’t come.
+064. [ai] Aleksandr: He bent over her, kissing her roughly, his tongue dominating her mouth.
+065. [ai] Mikhail: Such a good girl,
+066. [ai] Mikhail: Taking us both so well. Such a perfect little toy.
+067. [ai] Mikhail: Fuck baby ,
+068. [ai] Mikhail: Perfect,
+069. [ai] Mikhail: Fucking perfect for us.
+070. [ai] Aleksandr: Aleksandr slid out gently, removing the cuffs and blindfold, and wrapped himself around her from behind.
+071. [ai] Mikhail: Mikhail pressed close to her front, his hand splaying across her stomach.
+072. [ai] Mikhail: Mikhail kissed her eyes.
+073. [ai] Mikhail: You okay kitten?
+074. [ai] Isabelle: She nodded, breathless.
+075. [ai] Isabelle: I’ve never felt more loved.
+076. [ai] Mikhail: Mikhail cupped her face, wiping away tears and sweat.
+077. [ai] Mikhail: You’re ours. Always.
+078. [reinj] Narrator: Aleksandr returned a moment later, and Mikhail calmly said, “She’s misbehaving.
+079. [reinj] Narrator: Waiting for us to devour you.” And then he thrust inside her.
+===== [EOD][TAIL] END =====
+
+>>> Yielding chunk 1/1: dialogues=79, ambiguities=1
+>>> Wrote parser timings/tokens: [288.70 (1294)]

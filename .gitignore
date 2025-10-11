@@ -26,6 +26,7 @@ fx_library/
 ffmpeg/
 nltk_data/
 audio_output/
+logs/
 
 # Binaries
 ffprobe

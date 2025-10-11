@@ -26,7 +26,8 @@ def build_system_prompt(
         "- Narrator vs POV:",
         "  * Use 'Narrator' for objective, third-person description or scene setting that is NOT tied to any specific character’s perspective.",
         "  * Use the active POV character only when the line clearly reflects their own perspective (first-person pronouns like 'I', 'me', 'my' AND context showing it’s their thought/feeling).",
-        "  * If the line describes actions/appearance/emotions of another character in third-person, use 'Narrator'.",
+        "  * Use 'Narrator' only for purely descriptive, scene-setting, or omniscient exposition that does not focus on any named character’s own actions or dialogue.",
+        "  * If a named character (e.g., Aleksandr, Mikhail) performs an action, speaks, or has an emotional verb (smiled, murmured, whispered, frowned, etc.), attribute that to the named character, not Narrator.",
         "- Dialogue attribution (quoted speech):",
         "  * If quoted text is followed by said/asked/whispered/shouted/replied/murmured + a name or pronoun, infer that subject as the speaker.",
         "  * If a line starts with a name or pronoun and includes quoted text later, infer that subject as the speaker of the quoted dialogue.",
@@ -52,7 +53,7 @@ def build_system_prompt(
         "- candidates allowed only when character == 'Ambiguous'.",
         "",
         "Coverage requirements:",
-        "- Do NOT skip or drop any input sentence. Every sentence from the provided text MUST appear as a JSONL output line.",
+        "- Cover all meaningful narrative and dialogue content. Purely connective or trivial lines (e.g., 'And then.', 'After that.') may be omitted.",
         "- If unsure about the speaker, still output the sentence with character 'Ambiguous' and include 2–5 'candidates'.",
         "- If unsure about emotions, still output the sentence and choose sensible defaults (e.g., 'calm' plus another allowed neutral emotion).",
         f"ALLOWED_EMOTIONS: {ae}",
@@ -73,6 +74,7 @@ def build_system_prompt(
         '{"character": "Ambiguous", "emotions": ["neutral", "calm"], "candidates": ["Aria Amato", "Luca Moretti"], "text": "You two should keep your voices down."}',
         # Concise example for attribution verbs handling
         'Input: "Keep your eyes on me," she commanded. → Output: {"character":"Maya","emotions":["commanding","dominant"],"text":"Keep your eyes on me."}',
+        'Input: Aleksandr murmured, "You look beautiful." → Output: {"character":"Aleksandr","emotions":["gentle","warm"],"text":"You look beautiful."}',
     ])
     # REJECTED clause to prevent silent drops and enforce explicit refusal tagging
     lines.extend([
