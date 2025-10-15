@@ -25,6 +25,35 @@ from parsers.dialogue_parser import DialogueParser
 from audio.generator import DialogueAudioGenerator
 from utils.session_logger import log_to_session, log_exception
 from utils.log_instrumentation import log_timed_action
+import os
+import time
+import traceback
+
+TTS_DEBUG = os.getenv("TTS_DEBUG", "0") == "1"
+
+
+def _ttsdbg(msg: str):
+    if TTS_DEBUG:
+        print(f"[TTSDBG] {msg}", flush=True)
+
+
+ALLOWED_STABILITIES = (0.0, 0.5, 1.0)
+
+
+def _sanitize_voice_settings(model_id: str, vs: dict | None) -> dict:
+    """Clamp/clean voice_settings for ElevenLabs v3 rules to avoid 400s."""
+    if not vs:
+        return {}
+    out = {}
+    stab = vs.get("stability", None)
+    if isinstance(stab, (int, float)):
+        nearest = min(ALLOWED_STABILITIES, key=lambda x: abs(x - float(stab)))
+        out["stability"] = nearest
+    sb = vs.get("similarity_boost", None)
+    if isinstance(sb, (int, float)):
+        out["similarity_boost"] = max(0.0, min(1.0, float(sb)))
+    _ttsdbg(f"voice_settings sanitized for model={model_id}: {out}")
+    return out
 
 
 @dataclass
@@ -97,27 +126,45 @@ class ResumableBatchGenerator:
         - On total failure, return short silence (never raise), with explicit log
         """
         if not text.strip():
+            _ttsdbg("tts fallback: returning generated silence segment")
             return AudioSegment.silent(duration=200)
 
         def _try_once(t: str) -> Optional[AudioSegment]:
             result: Dict[str, Optional[bytes]] = {"data": None}
+            attempt_id = int(time.time() * 1000) % 100000000
+            text_preview = (repr(t[:120]) + "…") if len(t) > 120 else repr(t)
+            _ttsdbg(
+                f"_try_once: start attempt={attempt_id} model_id={self.model_id} voice_id={voice_id or self.default_voice_id} text_len={len(t)} text_preview={text_preview}"
+            )
+            start_ts = time.time()
 
             def _worker():
                 try:
                     print(
                         f"[TTS] start voice_id={(voice_id or self.default_voice_id)!r} model_id={self.model_id} len={len(t)} preview={t[:80]!r}", flush=True)
                     vs = self._voice_settings or {}
-                    stream = self.client.text_to_speech.convert(
-                        voice_id=voice_id or self.default_voice_id,
-                        text=t,
-                        model_id="eleven_v3",
-                        voice_settings={
-                            "stability": vs.get("stability", 0.35),
-                            "similarity_boost": vs.get("similarity_boost", 0.85),
-                            "style": vs.get("style", 0.50),
-                            "use_speaker_boost": bool(vs.get("use_speaker_boost", True)),
-                        },
-                    )
+                    safe_vs = _sanitize_voice_settings(self.model_id, vs)
+                    try:
+                        stream = self.client.text_to_speech.convert(
+                            voice_id=voice_id or self.default_voice_id,
+                            text=t,
+                            model_id="eleven_v3",
+                            voice_settings=safe_vs,
+                        )
+                    except Exception as e:
+                        msg = str(e)
+                        _ttsdbg(f"_try_once: ApiError on convert: {msg}")
+                        if "invalid_ttd_stability" in msg.lower():
+                            _ttsdbg(
+                                "_try_once: retrying once with stability=0.5")
+                            stream = self.client.text_to_speech.convert(
+                                voice_id=voice_id or self.default_voice_id,
+                                text=t,
+                                model_id="eleven_v3",
+                                voice_settings={"stability": 0.5},
+                            )
+                        else:
+                            raise
                     try:
                         import os
                         if os.getenv("ELEVENLABS_DEBUG_REQUESTS") == "1":
@@ -131,19 +178,47 @@ class ResumableBatchGenerator:
                     total_parts = 0
                     total_bytes = 0
                     print("[TTS] stream begin", flush=True)
+                    _ttsdbg(
+                        f"_worker: streaming begin model_id={self.model_id} voice_id={voice_id or self.default_voice_id}")
+                    chunk_idx = 0
                     for part in stream:
                         if part:
                             buf.write(part)
                             total_parts += 1
                             total_bytes += len(part)
+                            chunk_idx += 1
                             print(
                                 f"[TTS] stream part size={len(part)} bytes", flush=True)
+                            if chunk_idx <= 3:
+                                _ttsdbg(
+                                    f"_worker: chunk {chunk_idx} size={len(part)} bytes")
+                        else:
+                            chunk_idx += 1
+                            _ttsdbg(f"_worker: chunk {chunk_idx} empty/None")
                     print(
                         f"[TTS] stream complete parts={total_parts} bytes={total_bytes}", flush=True)
+                    _ttsdbg(
+                        f"_worker: streaming end chunks={chunk_idx} total_bytes={total_bytes}")
+                    if TTS_DEBUG and total_bytes > 0:
+                        try:
+                            os.makedirs("debug", exist_ok=True)
+                            first_path = os.path.join(
+                                "debug", "first_stream.mp3")
+                            if not os.path.exists(first_path):
+                                with open(first_path, "wb") as df:
+                                    df.write(buf.getvalue())
+                                _ttsdbg(
+                                    "debug artifact: wrote debug/first_stream.mp3")
+                        except Exception as _e:
+                            _ttsdbg(
+                                f"debug artifact: failed to write raw stream: {_e!r}")
                     result["data"] = buf.getvalue()
                 except Exception as e:
                     print(
                         f"[TTS] exception during stream: {type(e).__name__}: {e}", flush=True)
+                    _ttsdbg(
+                        f"_try_once: EXCEPTION attempt={attempt_id}: {e!r}")
+                    _ttsdbg(traceback.format_exc())
                     result["data"] = None
 
             th = threading.Thread(target=_worker, daemon=True)
@@ -153,6 +228,9 @@ class ResumableBatchGenerator:
                 # timed out
                 print(
                     f"[TTS] timeout after 90s for length={len(t)}", flush=True)
+                _ttsdbg(
+                    f"_try_once: TIMEOUT attempt={attempt_id} after_ms={int((time.time()-start_ts)*1000)}"
+                )
                 return None
             data = result.get("data")
             if not data:
@@ -166,6 +244,9 @@ class ResumableBatchGenerator:
                         f"[TTS] decoded <50ms for length={len(t)}", flush=True)
                     return None
                 print(f"[TTS] decode ok len_ms={len(audio)}", flush=True)
+                _ttsdbg(
+                    f"_try_once: success attempt={attempt_id} bytes={len(data) if data else 0} elapsed_ms={int((time.time()-start_ts)*1000)}"
+                )
                 return audio
             except Exception as e:
                 print(
@@ -179,6 +260,7 @@ class ResumableBatchGenerator:
             if depth >= 2 or len(t.strip()) <= 1:
                 print(
                     f"[TTS] fallback to silence at depth={depth} len={len(t)}", flush=True)
+                _ttsdbg("tts fallback: returning generated silence segment")
                 return AudioSegment.silent(duration=300)
             # Split and recurse
             mid = max(1, len(t) // 2)
@@ -212,6 +294,9 @@ class ResumableBatchGenerator:
         add = self._ensure(add)
         print(
             f"[merge] base_len={len(base)} add_len={len(add)} crossfade={self.CROSSFADE_MS} pad_after={pad_after}", flush=True)
+        _ttsdbg(
+            f"_merge: base_ms={len(base)} add_ms={len(add)} pad_after_ms={pad_after} crossfade_ms={self.CROSSFADE_MS}"
+        )
         if len(base) > 0:
             merged = base.append(add, crossfade=self.CROSSFADE_MS)
         else:
@@ -219,6 +304,7 @@ class ResumableBatchGenerator:
         if pad_after:
             merged = merged + AudioSegment.silent(duration=self.PAD_MS)
         print(f"[merge] result_len={len(merged)}", flush=True)
+        _ttsdbg(f"_merge: result_ms={len(merged)}")
         return merged
 
     def _smart_subchunks(self, text: str, limit: int = 200) -> List[str]:
@@ -254,12 +340,26 @@ class ResumableBatchGenerator:
 
     def _tts_for_text(self, text: str, voice_id: str) -> AudioSegment:
         """Pre-chunk long text and synthesize sequentially; join seamlessly."""
+        _ttsdbg(f"_tts_for_text: original text_len={len(text)}")
         subtexts = self._smart_subchunks(text, limit=200)
+        try:
+            avg_len = int(sum(len(t)
+                          for t in subtexts) / max(1, len(subtexts)))
+        except Exception:
+            avg_len = 0
+        _ttsdbg(f"_tts_for_text: subchunks={len(subtexts)} avg_len={avg_len}")
         seg = AudioSegment.silent(duration=0)
-        for stx in subtexts:
+        for i, stx in enumerate(subtexts, start=1):
             part = self._tts_chunk(stx, voice_id)
             # Seamless concatenation (no pad, no crossfade)
             seg = self._ensure(seg) + self._ensure(part)
+            try:
+                _ttsdbg(
+                    f"_tts_for_text: subchunk {i}/{len(subtexts)} duration_ms={len(part)}")
+            except Exception:
+                pass
+        _ttsdbg(
+            f"_tts_for_text: concatenated subchunks duration_ms={len(seg)}")
         return seg
 
     def _finalize_consolidated(self, audio: AudioSegment) -> AudioSegment:
@@ -483,12 +583,15 @@ class ResumableBatchGenerator:
 
     @log_timed_action("ResumableBatchGenerator.run")
     def run(self, full_text: str, progress_cb: Optional[Callable[[int, int], None]] = None):
+        _ttsdbg(
+            f"run: start project={self.project_id} max_workers={self.max_workers}")
         try:
             log_to_session("INFO", "Batch generation started",
                            src="audio/batch_generator.py:run")
         except Exception:
             pass
         sequence = self._build_sequence(full_text)
+        _ttsdbg(f"run: sequence_len={len(sequence)}")
         if not sequence:
             return
         # --- Heartbeat: keep UI alive during long waits ---
@@ -554,6 +657,13 @@ class ResumableBatchGenerator:
             f"[generator] indices_to_process count={len(indices_to_process)} total={len(sequence)} committed_index={last_committed} indices={indices_to_process}",
             flush=True,
         )
+        try:
+            skip_count = len(sequence) - len(indices_to_process)
+            _ttsdbg(
+                f"run: resume last_committed(state)={state_committed} last_committed(s3)={s3_committed} chosen={last_committed} skip_count={skip_count}"
+            )
+        except Exception:
+            pass
 
         total = len(ids)
         completed = total - len(indices_to_process)
@@ -642,15 +752,18 @@ class ResumableBatchGenerator:
                 elif entry.get("type") == "sound_effect":
                     print(
                         f"[generator] collect idx={i} non-speech(type=sound_effect) -> skip TTS", flush=True)
+                    _ttsdbg("tts fallback: returning generated silence segment")
                     seg = AudioSegment.silent(duration=200)
                 elif entry.get("type") == "pause":
                     print(
                         f"[generator] collect idx={i} non-speech(type=pause) -> skip TTS", flush=True)
+                    _ttsdbg("tts fallback: returning generated silence segment")
                     seg = AudioSegment.silent(
                         duration=int(entry.get("duration", 300)))
                 else:
                     print(
                         f"[generator] collect idx={i} non-speech(type=other) -> skip TTS", flush=True)
+                    _ttsdbg("tts fallback: returning generated silence segment")
                     seg = AudioSegment.silent(duration=50)
 
                 # Avoid PAD if the very next entry in the full sequence is an explicit pause
@@ -747,6 +860,9 @@ class ResumableBatchGenerator:
         try:
             print(
                 f"[upload] final upload entries={len(sequence)} len_ms={len(consolidated)} key={self.audio_key}", flush=True)
+            _ttsdbg(
+                f"run: final merged duration_ms={len(consolidated)} about to upload final key={self.audio_key}"
+            )
             try:
                 rss = psutil.Process(os.getpid()).memory_info().rss / 1e6
                 now = datetime.datetime.now().strftime("%H:%M:%S")
@@ -767,6 +883,7 @@ class ResumableBatchGenerator:
             self.state.set_latest_url(
                 s3_generate_presigned_url(self.audio_key, 3600))
             self.state.save()
+            _ttsdbg("run: COMPLETED")
             try:
                 log_to_session("INFO", "final upload complete",
                                src="audio/batch_generator.py:run")
