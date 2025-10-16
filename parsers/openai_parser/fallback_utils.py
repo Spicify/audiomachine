@@ -109,6 +109,105 @@ def _normalize_text(s: str) -> str:
     return s.strip().lower()
 
 
+def _extract_quotes(text: str) -> list[str]:
+    """Extract normalized quoted spans. Never raises; returns [] if none.
+
+    - Handles straight and curly quotes
+    - Trims whitespace and trailing punctuation
+    - Logs a brief diagnostic
+    """
+    out: list[str] = []
+    try:
+        if not text:
+            print("[FB_QOUTES] extracted=0 samples=[]", flush=True)
+            return out
+        import re as _re
+        raw = _re.findall(r'“([^”]+)”|"([^"]+)"', text)
+        for g1, g2 in raw:
+            q = (g1 or g2 or "").strip()
+            if not q:
+                continue
+            q = _normalize_text(q)
+            # strip terminal punctuation
+            q = q.rstrip('.,;:!?"\'')
+            if q:
+                out.append(q)
+    except Exception:
+        out = []
+    try:
+        _samples = out[:2]
+        print(
+            f"[FB_QOUTES] extracted={len(out)} samples={_samples}", flush=True)
+    except Exception:
+        pass
+    return out
+
+
+def _norm_for_compare(s: str) -> str:
+    s = _normalize_text(s)
+    # strip surrounding quotes and collapse spaces are already done in _normalize_text
+    return s.rstrip('.,;:!?')
+
+
+def _token_jaccard(a: str, b: str) -> float:
+    at = set((a or "").split())
+    bt = set((b or "").split())
+    if not at or not bt:
+        return 0.0
+    inter = len(at & bt)
+    union = len(at | bt)
+    return (inter / union) if union else 0.0
+
+
+def _edit_ratio(a: str, b: str) -> float:
+    try:
+        import difflib as _df
+        return _df.SequenceMatcher(None, a, b).ratio()
+    except Exception:
+        return 0.0
+
+
+def filter_fallback_lines(segment_text: str, candidate_lines: list[dict]) -> list[dict]:
+    """Filter Friendli candidate lines against the source segment with robust fuzzy match.
+
+    Acceptance:
+    - edit ratio ≥ 0.55 OR
+    - short utterances (<6 tokens): token jaccard ≥ 0.6
+    - if both ≤4 tokens and share ≥1 token → accept
+    Logs one [FB_FUZZY] per candidate.
+    """
+    src_quotes = _extract_quotes(segment_text)
+    src = src_quotes[0] if src_quotes else segment_text
+    src_n = _norm_for_compare(src)
+    kept: list[dict] = []
+    for ln in candidate_lines or []:
+        txt = (ln or {}).get("text", "")
+        cand_n = _norm_for_compare(txt)
+        jacc = _token_jaccard(src_n, cand_n)
+        edit = _edit_ratio(src_n, cand_n)
+        cand_tokens = len((cand_n or "").split())
+        keep = False
+        if edit >= 0.55:
+            keep = True
+        elif cand_tokens < 6 and jacc >= 0.6:
+            keep = True
+        else:
+            both_short = len((src_n or "").split()) <= 4 and cand_tokens <= 4
+            shared = jacc > 0.0
+            if both_short and shared:
+                keep = True
+        try:
+            print(
+                f"[FB_FUZZY] src='{src_n[:60]}' cand='{cand_n[:60]}' jacc={jacc:.2f} edit={edit:.2f} keep={keep}",
+                flush=True,
+            )
+        except Exception:
+            pass
+        if keep:
+            kept.append(ln)
+    return kept
+
+
 _SENT_SPLIT_RX = re.compile(r'(?<=[.!?])\s+')
 
 
@@ -333,38 +432,101 @@ def replace_or_insert_lines(dialogues, start_index, new_lines, end_index=None):
             pass
         i += 1
 
-    # Determine insertion point by content anchoring using the first new line
-    insert_at = None
-    first_new = new_norms[0] if new_norms else ""
-    if first_new:
-        for j in range(len(dialogues) - 1, -1, -1):
+    # If per-line span provided, insert each line at its own position
+    try:
+        has_spans = any(isinstance(nl, dict) and nl.get(
+            "_span_start") is not None for nl in (new_lines or []))
+    except Exception:
+        has_spans = False
+    if has_spans:
+        for nl in (new_lines or []):
             try:
-                dnorm = _n(dialogues[j].get("text", ""))
-                if dnorm and (dnorm in first_new or first_new in dnorm):
-                    insert_at = j + 1
-                    break
+                pos_raw = nl.get("_span_start", 0)
+                pos = int(pos_raw) if isinstance(pos_raw, (int, str)) else 0
             except Exception:
-                continue
-    if insert_at is None:
-        if start_index == 0:
-            insert_at = 0
-        else:
-            insert_at = len(dialogues)
+                pos = 0
+            pos = max(0, min(pos, len(dialogues)))
+            dialogues[pos:pos] = [nl]
             try:
                 print(
-                    "[DIAG] No content anchor found; appending new lines at end.", flush=True)
+                    f"[REINJ_LINE] pos={pos} span=[{start_index}:{(end_index if end_index is not None else start_index)+1}] speaker={str(nl.get('character',''))} text='{(nl.get('text','') or '')[:80]}'",
+                    flush=True,
+                )
             except Exception:
                 pass
+        # Maintain anchor summary log for visibility
+        try:
+            _first = (new_norms[0] if new_norms else "")
+            print(
+                f"[REINJ_ANCHOR] first_new='{_first[:80]}' insert_at=per-line tail_append=False",
+                flush=True,
+            )
+        except Exception:
+            pass
+    else:
+        # Determine insertion point by content anchoring using the first new line
+        insert_at = None
+        first_new = new_norms[0] if new_norms else ""
+        if first_new:
+            for j in range(len(dialogues) - 1, -1, -1):
+                try:
+                    dnorm = _n(dialogues[j].get("text", ""))
+                    if dnorm and (dnorm in first_new or first_new in dnorm):
+                        insert_at = j + 1
+                        break
+                except Exception:
+                    continue
+        if insert_at is None:
+            # try positional guess based on start_idx if available
+            approx_index = (
+                new_lines[0].get("_span_start", None)
+                if isinstance(new_lines, list) and new_lines and isinstance(new_lines[0], dict)
+                else None
+            )
+            if approx_index is not None and int(approx_index) >= 0:
+                insert_at = min(int(approx_index), len(dialogues))
+                try:
+                    print(
+                        f"[REINJ_ANCHOR] fallback positional insert at {insert_at}", flush=True)
+                except Exception:
+                    pass
+            else:
+                insert_at = len(dialogues)
+                try:
+                    print(
+                        f"[REINJ_ANCHOR] no anchor found; tail_append=True", flush=True)
+                except Exception:
+                    pass
 
-    dialogues[insert_at:insert_at] = list(new_lines or [])
+        # Instrumentation: log anchor decision
+        try:
+            print(
+                f"[REINJ_ANCHOR] first_new='{first_new[:80]}' insert_at={insert_at} tail_append={insert_at==len(dialogues)}",
+                flush=True,
+            )
+        except Exception:
+            pass
+
+        dialogues[insert_at:insert_at] = list(new_lines or [])
 
     # Diagnostics: snapshot after
     try:
-        _lo2 = max(0, insert_at - 2)
-        _hi2 = min(len(dialogues), (insert_at + len(new_lines) + 3))
+        _lo2 = max(0, (insert_at if 'insert_at' in locals()
+                   and insert_at is not None else 0) - 2)
+        _hi2 = min(len(dialogues), ((insert_at if 'insert_at' in locals()
+                   and insert_at is not None else 0) + len(new_lines) + 3))
         _after = [(i, str(dialogues[i].get("character", "")), (dialogues[i].get(
             "text", "") or "")[:80]) for i in range(_lo2, _hi2)]
         print(
             f"[DIAG] After replace/insert slice {_lo2}:{_hi2}: {_after}", flush=True)
+    except Exception:
+        pass
+
+    # Instrumentation: log reinjection result
+    try:
+        print(
+            f"[REINJ_RESULT] total_inserted={len(new_lines)} final_len={len(dialogues)}",
+            flush=True,
+        )
     except Exception:
         pass

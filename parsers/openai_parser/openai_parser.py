@@ -27,6 +27,7 @@ from .fallback_utils import (
     detect_missing_or_rejected_lines,
     call_frendli_fallback,
     replace_or_insert_lines,
+    filter_fallback_lines,
 )
 from utils.log_instrumentation import log_timed_action
 from utils.session_logger import log_to_session, log_exception
@@ -278,6 +279,16 @@ class OpenAIParser:
                         fixed["candidates"] = cands[:5]
                 fixed["id"] = f"amb-{abs(hash(txt))}"
 
+            # Instrumentation: narrator/ambiguous attribution
+            try:
+                if (fixed.get("character") in ("Narrator", "Ambiguous")):
+                    print(
+                        f"[ATTR] {fixed['character']} text='{fixed['text'][:80]}'",
+                        flush=True,
+                    )
+            except Exception:
+                pass
+
             try:
                 DialogueLine(**fixed)
             except ValidationError as ve:
@@ -308,6 +319,12 @@ class OpenAIParser:
                     objs.append(obj)
             except Exception:
                 continue
+        if not objs:
+            try:
+                print(
+                    "[WARN] _parse_jsonl: no valid JSONL lines extracted", flush=True)
+            except Exception:
+                pass
         return objs
 
     # Friendli-only pre-clean for JSONL quirks
@@ -499,9 +516,39 @@ class OpenAIParser:
                     if len(problem_segments) > 3:
                         print(
                             f"[WARN][FB] Excessive fallback segments ({len(problem_segments)}) — merging into a single consolidated fallback request.", flush=True)
-                        merged_text = " ".join(seg.get("text", "")
-                                               for seg in problem_segments[:15])
-                        problem_segments = [{"text": merged_text}]
+                        from .fallback_utils import _split_sentences as _fb_split
+                        # Merge text but preserve approximate indices for span mapping
+                        combined_text = " ".join(
+                            seg.get("text", "") for seg in problem_segments[:15])
+                        # Approximate indices flattened from original groups
+                        approx_indices: list[int] = []
+                        for _seg in problem_segments[:15]:
+                            try:
+                                s_i = int(_seg.get("start_idx", 0))
+                                e_i = int(_seg.get("end_idx", s_i))
+                            except Exception:
+                                s_i = 0
+                                e_i = 0
+                            if e_i < s_i:
+                                e_i = s_i
+                            span = list(range(s_i, e_i + 1)) or [s_i]
+                            approx_indices.extend(span)
+                        # Ensure at least one index exists
+                        if not approx_indices:
+                            try:
+                                sent_infos = _fb_split(combined_text)
+                                approx_indices = [0] * max(1, len(sent_infos))
+                            except Exception:
+                                approx_indices = [0]
+                        try:
+                            print(
+                                f"[EOD_FALLBACK_SPANS] count={len(approx_indices)} indices={approx_indices[:10]}",
+                                flush=True,
+                            )
+                        except Exception:
+                            pass
+                        problem_segments = [
+                            {"text": combined_text, "_approx_indices": approx_indices}]
                         self._eod_fallback_throttled = True
                     else:
                         self._eod_fallback_throttled = False
@@ -577,36 +624,22 @@ class OpenAIParser:
                             f"[DEBUG] Fallback parsed {len(fb_lines)} line(s)", flush=True)
                         fb_valid, warnings = self._validate_and_fix(
                             fb_lines, warnings, state)
+                        # If EOD consolidation carried approx indices, assign them to lines by order
+                        try:
+                            approx = seg.get("_approx_indices") or []
+                            if approx and fb_valid:
+                                for k, _ln in enumerate(fb_valid):
+                                    _ln["_span_start"] = int(
+                                        approx[min(k, len(approx)-1)])
+                        except Exception:
+                            pass
                         # --- Localized fuzzy validation against segment text + intra-response dedup ---
                         segment_text = seg.get("text", "") or ""
-                        segment_clean = _extract_quotes(segment_text)
-                        validated_fb: List[Dict[str, Any]] = []
-                        dropped_fb: List[Tuple[str, float]] = []
-                        for i_fb, fb_line in enumerate(fb_valid):
-                            fb_txt = fb_line.get("text", "")
-                            sim_loc = _fuzzy_sim(fb_txt, segment_clean)
-                            if sim_loc >= 0.5:
-                                validated_fb.append(fb_line)
-                            else:
-                                dropped_fb.append((fb_txt, sim_loc))
-                        kept_final: List[Dict[str, Any]] = []
-                        for fb_line in validated_fb:
-                            fb_txt = fb_line.get("text", "")
-                            overlap = False
-                            for kept in kept_final:
-                                sim2 = _fuzzy_sim(fb_txt, kept.get("text", ""))
-                                if sim2 > 0.7:
-                                    overlap = True
-                                    dropped_fb.append((fb_txt, sim2))
-                                    break
-                            if not overlap:
-                                kept_final.append(fb_line)
-                        fb_valid = kept_final
+                        from .fallback_utils import filter_fallback_lines as _fb_filter
+                        # Apply robust fuzzy filter with diagnostics
+                        fb_valid = _fb_filter(segment_text, fb_valid)
                         print(
-                            f"[EOD][FB_SUMMARY] After fuzzy filter (quote-normalized): kept={len(fb_valid)}, dropped={len(dropped_fb)}", flush=True)
-                        for _txt, _sim in dropped_fb[:3]:
-                            print(
-                                f"[DIAG][FB_DROP] sim={_sim:.2f} text={_txt[:80]!r}", flush=True)
+                            f"[EOD][FB_SUMMARY] After fuzzy filter: kept={len(fb_valid)}", flush=True)
                         for _ln in fb_valid:
                             try:
                                 _ln.setdefault("_src", "fb")
@@ -683,6 +716,14 @@ class OpenAIParser:
                                 self._preclean_jsonl(fb_raw))
                             fb_valid, warnings = self._validate_and_fix(
                                 fb_lines, warnings, state)
+                            # Propagate span start for positional reinsertion (streaming)
+                            try:
+                                _sidx = seg.get("start_idx", 0)
+                                for _ln in fb_valid:
+                                    if isinstance(_ln, dict):
+                                        _ln["_span_start"] = _sidx
+                            except Exception:
+                                pass
                             for _ln in fb_valid:
                                 try:
                                     _ln.setdefault("_src", "fb")
@@ -791,6 +832,15 @@ class OpenAIParser:
                               for si in sent_infos if a <= si["index"] <= b]
                 avg_tokens = sum(len(t.split())
                                  for t in sent_texts) / max(1, len(sent_texts))
+            # Instrumentation: reinjection group summary
+            try:
+                print(
+                    f"[REINJ_GROUP] span=({a},{b}) count={len(sent_texts)}", flush=True)
+                for _txt in sent_texts:
+                    print(
+                        f"    [REINJ_LINE] text='{(_txt or '')[:80]}'", flush=True)
+            except Exception:
+                pass
                 if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
                     if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
                         try:
@@ -811,17 +861,38 @@ class OpenAIParser:
             except Exception:
                 pass
             for m in to_reinject:
+                # infer character contextually from last speaker; default Narrator
+                try:
+                    last_char = reconciled[-1]["character"] if reconciled else "Narrator"
+                except Exception:
+                    last_char = "Narrator"
+                txt_lower = (m or "").lower()
+                char_guess = last_char
+                try:
+                    if any(w in txt_lower for w in ["“", '"', " said", "asked", "whispered", "replied", "murmured", "moaned", "commanded"]) and last_char not in ("Narrator", "Ambiguous"):
+                        char_guess = last_char
+                    elif (m or "").strip().startswith(("“", '"')):
+                        # quote but no clear attribution
+                        char_guess = "Ambiguous" if last_char in (
+                            "Narrator", "Ambiguous") else last_char
+                    else:
+                        char_guess = "Narrator"
+                except Exception:
+                    char_guess = last_char or "Narrator"
                 reconciled.append({
-                    "character": "Narrator",
+                    "character": char_guess,
                     "emotions": ["neutral", "calm"],
                     "text": m,
                     "id": f"reinjected-{abs(hash(m))}",
                     "_src": "reinj",
                 })
                 try:
-                    _samples = [d.get("text", "") for d in reconciled[:2]]
+                    reason = "prev" if char_guess not in ("Narrator", "Ambiguous") else (
+                        "quote-no-speaker" if (m or "").strip().startswith(("“", '"')) else "none")
                     print(
-                        f"[DIAG] Reinjected (strict) sentence: '{(m or '')[:120]}' | samples={_samples}", flush=True)
+                        f"[REINJ_FIX] text='{(m or '')[:80]}' char_guess={char_guess} reason={reason}",
+                        flush=True,
+                    )
                 except Exception:
                     pass
             _diag_reinj_added_total += len(to_reinject)
@@ -869,6 +940,16 @@ class OpenAIParser:
             em_text = "".join([f"({e})" for e in d.get("emotions", [])])
             formatted_lines.append(
                 f"[{d['character']}] {em_text}: {d['text']}".strip())
+
+        # Instrumentation: ordering view on last 20 reconciled lines
+        try:
+            for i, d in enumerate(reconciled[-20:]):
+                print(
+                    f"[ORDER] idx={i:04d} src={d.get('_src')} char={d.get('character')} text='{(d.get('text') or '')[:60]}'",
+                    flush=True,
+                )
+        except Exception:
+            pass
 
         stats = {
             "quotes_found": len(reconciled),
@@ -1172,37 +1253,21 @@ class OpenAIParser:
                                 f"[DEBUG] Fallback parsed {len(fb_lines)} line(s)", flush=True)
                             fb_valid, warnings = self._validate_and_fix(
                                 fb_lines, warnings, state)
+                            # If EOD consolidation carried approx indices, assign them to lines by order
+                            try:
+                                approx = seg.get("_approx_indices") or []
+                                if approx and fb_valid:
+                                    for k, _ln in enumerate(fb_valid):
+                                        _ln["_span_start"] = int(
+                                            approx[min(k, len(approx)-1)])
+                            except Exception:
+                                pass
                             # --- Localized fuzzy validation against segment text + intra-response dedup (streaming) ---
                             segment_text = seg.get("text", "") or ""
-                            segment_clean = _extract_quotes(segment_text)
-                            validated_fb: List[Dict[str, Any]] = []
-                            dropped_fb: List[Tuple[str, float]] = []
-                            for i_fb, fb_line in enumerate(fb_valid):
-                                fb_txt = fb_line.get("text", "")
-                                sim_loc = _fuzzy_sim(fb_txt, segment_clean)
-                                if sim_loc >= 0.5:
-                                    validated_fb.append(fb_line)
-                                else:
-                                    dropped_fb.append((fb_txt, sim_loc))
-                            kept_final: List[Dict[str, Any]] = []
-                            for fb_line in validated_fb:
-                                fb_txt = fb_line.get("text", "")
-                                overlap = False
-                                for kept in kept_final:
-                                    sim2 = _fuzzy_sim(
-                                        fb_txt, kept.get("text", ""))
-                                    if sim2 > 0.7:
-                                        overlap = True
-                                        dropped_fb.append((fb_txt, sim2))
-                                        break
-                                if not overlap:
-                                    kept_final.append(fb_line)
-                            fb_valid = kept_final
+                            from .fallback_utils import filter_fallback_lines as _fb_filter
+                            fb_valid = _fb_filter(segment_text, fb_valid)
                             print(
-                                f"[EOD][FB_SUMMARY] After fuzzy filter (quote-normalized): kept={len(fb_valid)}, dropped={len(dropped_fb)}", flush=True)
-                            for _txt, _sim in dropped_fb[:3]:
-                                print(
-                                    f"[DIAG][FB_DROP] sim={_sim:.2f} text={_txt[:80]!r}", flush=True)
+                                f"[EOD][FB_SUMMARY] After fuzzy filter: kept={len(fb_valid)}", flush=True)
                             for _ln in fb_valid:
                                 try:
                                     _ln.setdefault("_src", "fb")
@@ -1396,6 +1461,15 @@ class OpenAIParser:
                 self._run_call_durations.append(chunk_duration_sec)
                 self._run_chunk_token_counts.append(
                     int(getattr(ch, "token_count", 0) or 0))
+                # Instrumentation: warn when no lines will be yielded for this chunk
+                try:
+                    if not filtered:
+                        print(
+                            f"[WARN][STREAM] No lines for chunk {idx+1}/{total}",
+                            flush=True,
+                        )
+                except Exception:
+                    pass
                 yield {
                     "chunk_index": idx + 1,
                     "total_chunks": total,

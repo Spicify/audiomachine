@@ -172,6 +172,13 @@ def deduplicate_lines(lines: List[dict]) -> List[dict]:
                 if exist_is_narr and not cur_is_narr:
                     # replace existing narrator with character version
                     result[existing_idx] = it
+                    try:
+                        print(
+                            f"[DEDUP_PREF] replaced Narrator with {it.get('character')} for '{txt_norm[:60]}'",
+                            flush=True,
+                        )
+                    except Exception:
+                        pass
                     seen.add(key)
                     continue
                 # else, drop current narrator duplicate

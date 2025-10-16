@@ -217,10 +217,16 @@ def create_logs_sub_tab():
         if res.get("next_token"):
             st.session_state[f"logs_token_{page+1}"] = res["next_token"]
 
-    # Optional filter
-    filter_text = st.text_input("Filter by date (YYYY-MM-DD)", "")
+    # Optional filter (date or simple substring)
+    colf1, colf2 = st.columns([2, 3])
+    with colf1:
+        filter_text = st.text_input("Filter by date (YYYY-MM-DD)", "")
+    with colf2:
+        filter_sub = st.text_input("Search within filenames (substring)", "")
     if filter_text:
         logs = [k for k in logs if filter_text in k]
+    if filter_sub:
+        logs = [k for k in logs if filter_sub.lower() in k.lower()]
 
     if not logs:
         st.info("No session logs found yet.")

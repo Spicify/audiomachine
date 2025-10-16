@@ -143,4 +143,8 @@ def ensure_two_emotions(
             iter(allowed - set(norm)), "calm")
         norm.append(add)
 
+    try:
+        print(f"[EMO] text='{text[:60]}' emotions={norm}", flush=True)
+    except Exception:
+        pass
     return norm[:2]

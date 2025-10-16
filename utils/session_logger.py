@@ -3,7 +3,7 @@ import threading
 import time
 import datetime
 import traceback
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import psutil
 
@@ -75,6 +75,42 @@ def log_to_session(level: str, msg: str, src: Optional[str] = None) -> None:
         entry = f"[{ts} UTC] [{(level or '').upper()}]{src_tag} {msg}\n"
         with _log_lock:
             _log_buffer.write(entry)
+    except Exception:
+        pass
+
+
+def log_json(level: str, cat: str, event: str, msg: str, kv: Optional[Dict[str, Any]] = None,
+             session_id: Optional[str] = None, project_id: Optional[str] = None, user_id: Optional[str] = None,
+             route: Optional[str] = None, control_id: Optional[str] = None, correlation_id: Optional[str] = None,
+             src: Optional[str] = None) -> None:
+    """Structured JSON log line appended to the same session buffer (alongside human-readable lines).
+
+    Fields: ts, level, cat, event, session_id, project_id, user_id, route, control_id, correlation_id, msg, kv
+    """
+    if not _logger_initialized:
+        return
+    try:
+        ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        payload: Dict[str, Any] = {
+            "ts": ts,
+            "level": (level or "").upper(),
+            "cat": cat,
+            "event": event,
+            "session_id": session_id,
+            "project_id": project_id or _project_id,
+            "user_id": user_id,
+            "route": route,
+            "control_id": control_id,
+            "correlation_id": correlation_id,
+            "msg": msg,
+            "kv": kv or {},
+        }
+        line = f"[JSON] {payload}\n"
+        with _log_lock:
+            _log_buffer.write(line)
+        if src:
+            # also emit a short human-readable line for quick scanning
+            log_to_session(level, f"{cat}/{event}: {msg}", src=src)
     except Exception:
         pass
 
