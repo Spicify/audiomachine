@@ -1,6 +1,8 @@
 from __future__ import annotations
 from difflib import SequenceMatcher as _SM
 import re as _re_quotes
+import re
+from difflib import SequenceMatcher
 
 import datetime
 import hashlib
@@ -19,7 +21,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from audio.utils import get_flat_emotion_tags, get_flat_character_voices
 from settings import OPENAI_API_KEY
-from .chunker import build_chunks, deduplicate_lines
+from .chunker import build_chunks, deduplicate_lines, deduplicate_lines_exact
 from .chunker import diag_consume_dedup_conflicts
 from .emotion_utils import EmotionMemory, build_emotion_kb, ensure_two_emotions, get_allowed_emotions
 from .prompt_builder import build_system_prompt, build_user_prompt
@@ -210,6 +212,7 @@ class OpenAIParser:
         self._run_chunk_token_counts: List[int] = []
         self._last_call_elapsed_sec: float = 0.0
         self._eod_fallback_throttled: bool = False
+        self.legacy_base_parser: bool = True  # TODO: later wire via settings if needed
 
     def _state_summary(self, state: ParserState) -> Dict[str, Any]:
         return {
@@ -326,6 +329,161 @@ class OpenAIParser:
             except Exception:
                 pass
         return objs
+
+    def _normalize_text_for_match(self, s: str) -> str:
+        if not s:
+            return ""
+        # unify quotes and whitespace; lowercase
+        s = s.replace("\u201C", '"').replace("\u201D", '"')
+        s = s.replace("\u2018", "'").replace("\u2019", "'")
+        s = re.sub(r"\s+", " ", s).strip().lower()
+        return s
+
+    def _build_sentence_to_pos_map(self, chunk_text: str, dialogues: list) -> dict:
+        """
+        Map sentence index → earliest dialogue index that best covers that sentence.
+        We consider containment or high similarity against dialogue text.
+        """
+        # Robust split: similar to our reinjection splitter
+        def _split_sentences_robust(text: str) -> list:
+            t = (text or "")
+            t = t.replace("\u201C", '"').replace("\u201D", '"')
+            t = t.replace("\u2018", "'").replace("\u2019", "'")
+            t = t.replace("\u2026", "...")
+            boundary = re.compile(
+                r'(?<=[.!?])\s+'
+                r'|(?<=,")\s+'
+                r'|(?<=,”)\s+'
+                r'|(?<=")\s+(?=(?:[A-Z]|he|she|they))'
+                r'|(?<=\.)\s+(?=")'
+            )
+            parts = [p.strip() for p in boundary.split(t) if p and p.strip()]
+            return parts
+
+        sents = _split_sentences_robust(chunk_text)
+        sent_norms = [self._normalize_text_for_match(s) for s in sents]
+
+        pos_map = {}  # sent_idx -> dialogue_pos
+        for di, obj in enumerate(dialogues):
+            txt = self._normalize_text_for_match((obj or {}).get("text", ""))
+            if not txt:
+                continue
+            # find the best sentence idx that this dialogue most likely covers
+            best_idx, best_sim = None, 0.0
+            for si, sn in enumerate(sent_norms):
+                if not sn:
+                    continue
+                if sn and (sn in txt or txt in sn):
+                    # containment is strong signal; prefer first hit
+                    best_idx, best_sim = si, 1.0
+                    break
+                sim = SequenceMatcher(None, sn, txt).ratio()
+                if sim > best_sim:
+                    best_idx, best_sim = si, sim
+            if best_idx is not None:
+                pos_map.setdefault(best_idx, di)
+        return pos_map
+
+    def _simple_reinject_missing_as_narrator(self, original_text: str, lines: list) -> list:
+        """
+        Legacy behavior: ensure every input sentence is represented.
+        - Split original_text into simple sentences.
+        - Normalize and compare against produced lines' text.
+        - For any sentence not covered by any line, append a Narrator line with that exact sentence.
+        - Preserve input order for any injected lines by scanning in input sequence and appending in that order.
+        """
+        import re
+        from difflib import SequenceMatcher
+
+        def _split_sentences_robust(text: str) -> list[str]:
+            """
+            Robust sentence splitter for reinjection:
+            - Treats standard sentence endings (. ! ?) as boundaries.
+            - Also treats comma+closing-quote (,” or ,") as a boundary commonly found in dialogue:
+              e.g., “You found it,” he said.
+            - Handles curly quotes (“ ”), ellipsis (…) and em dashes (—).
+            - Avoids over-splitting on simple commas.
+            """
+            import re
+
+            if not text:
+                return []
+
+            # Normalize common punctuation variants to make regex matching reliable
+            t = text
+            t = t.replace("\u201C", '"').replace(
+                "\u201D", '"')   # curly double quotes → "
+            t = t.replace("\u2018", "'").replace(
+                "\u2019", "'")   # curly single quotes → '
+            t = t.replace("\u2026", "...")                        # ellipsis
+            # Don't remove em dash — leave it; not a hard boundary by itself
+
+            # Pattern explanation:
+            #  - (?<=[.!?])\s+        → standard sentence enders
+            #  - (?<=,")\s+           → comma + closing quote boundary
+            #  - (?<=,”)\s+           → comma + curly quote boundary (already normalized above, but keep for safety)
+            #  - (?<=")\s+(?=(?:[A-Z]|he|she|they)) → closing quote followed by a likely attribution/next clause
+            #  - (?<=\.)\s+(?=")      → period followed by opening quote (new sentence starting with a quote)
+            #
+            # Notes:
+            #  * We deliberately do NOT split on plain commas.
+            #  * The attribution lookahead (he|she|they|Capitalized) is a pragmatic heuristic for dialogue attribution tails.
+            #  * Order of alternatives is chosen to prefer clear hard boundaries first.
+            boundary = re.compile(
+                r'(?<=[.!?])\s+'
+                r'|(?<=,")\s+'
+                r'|(?<=,”)\s+'
+                r'|(?<=")\s+(?=(?:[A-Z]|he|she|they))'
+                r'|(?<=\.)\s+(?=")'
+            )
+
+            # Split and trim; keep only non-empty sentences
+            parts = [p.strip() for p in boundary.split(t) if p and p.strip()]
+            return parts
+
+        def _normalize(s: str) -> str:
+            return re.sub(r"\s+", " ", s).strip().lower()
+
+        # robust sentence split to handle dialogue clauses ending with comma+quote
+        raw_sents = _split_sentences_robust(original_text)
+        raw_sents = [s for s in raw_sents if s.strip()]
+
+        produced_texts_norm = []
+        for obj in lines:
+            try:
+                txt = (obj.get("text", "") or "")
+                txt = txt.replace("\u201C", '"').replace(
+                    "\u201D", '"').replace("\u2018", "'").replace("\u2019", "'")
+                produced_texts_norm.append(_normalize(txt))
+            except Exception:
+                produced_texts_norm.append("")
+
+        def _covered(sent_norm: str) -> bool:
+            # Containment OR high-similarity match is considered covered
+            for pt in produced_texts_norm:
+                if not pt:
+                    continue
+                if sent_norm in pt or pt in sent_norm:
+                    return True
+                if SequenceMatcher(None, sent_norm, pt).ratio() >= 0.92:
+                    return True
+            return False
+
+        reinjected = []
+        for s in raw_sents:
+            sn = _normalize(s)
+            if not _covered(sn):
+                reinjected.append({
+                    "character": "Narrator",
+                    "emotions": ["neutral", "neutral"],
+                    "text": s,
+                    "_src": "reinj"
+                })
+        if not reinjected:
+            return lines
+
+        # Append reinjected lines at the end (legacy simple approach)
+        return lines + reinjected
 
     # Friendli-only pre-clean for JSONL quirks
     def _preclean_jsonl(self, raw: str) -> str:
@@ -586,8 +744,21 @@ class OpenAIParser:
                             f"[DIAG] Fallback segment text (len={len(_seg_text)}): {_seg_text[:300]}", flush=True)
                         print(
                             f"[DIAG] Passing known_characters to fallback: True", flush=True)
+                        # Scope known characters to current chunk's active speakers (+Narrator)
+                        try:
+                            _local_speakers = []
+                            for _obj in (fixed or []):
+                                _ch = str((_obj or {}).get(
+                                    "character", "")).strip()
+                                if _ch and _ch.lower() not in ("narrator", "ambiguous", "rejected"):
+                                    _local_speakers.append(_ch)
+                            scoped_known = sorted(set(_local_speakers))
+                            if "Narrator" not in scoped_known:
+                                scoped_known.append("Narrator")
+                        except Exception:
+                            scoped_known = ["Narrator"]
                         fb_raw = call_frendli_fallback(
-                            system_prompt, seg.get("text", ""), known_characters=list(state.known_characters or []))
+                            system_prompt, seg.get("text", ""), known_characters=scoped_known)
                         print(
                             f"[DEBUG] Fallback raw returned length={len(fb_raw)}", flush=True)
                         if idx == len(chunks) - 1:
@@ -645,6 +816,27 @@ class OpenAIParser:
                                 _ln.setdefault("_src", "fb")
                             except Exception:
                                 pass
+                        # Attach deterministic insertion position based on sentence span mapping
+                        try:
+                            sent_to_pos = self._build_sentence_to_pos_map(
+                                ch.text, fixed)
+                            anchor_sent = int(seg.get("start_idx", 0))
+                            pos = sent_to_pos.get(anchor_sent)
+                            if pos is None:
+                                for d in range(1, 11):
+                                    if sent_to_pos.get(anchor_sent - d) is not None:
+                                        pos = sent_to_pos.get(anchor_sent - d)
+                                        break
+                                    if sent_to_pos.get(anchor_sent + d) is not None:
+                                        pos = sent_to_pos.get(anchor_sent + d)
+                                        break
+                            if pos is None:
+                                pos = min(max(anchor_sent, 0), len(fixed))
+                            for _ln in fb_valid:
+                                if isinstance(_ln, dict) and "_span_start" not in _ln:
+                                    _ln["_span_start"] = int(pos)
+                        except Exception:
+                            pass
                         if idx == len(chunks) - 1:
                             print(
                                 f"[EOD][FB] validated_and_kept={len(fb_valid)} line(s) for seg#{_seg_i}", flush=True)
@@ -706,11 +898,23 @@ class OpenAIParser:
                     }]
                     for seg in problem_segments:
                         try:
+                            # Scope known characters to current chunk's active speakers (+Narrator)
+                            try:
+                                _local_speakers = []
+                                for _obj in (fixed or []):
+                                    _ch = str((_obj or {}).get(
+                                        "character", "")).strip()
+                                    if _ch and _ch.lower() not in ("narrator", "ambiguous", "rejected"):
+                                        _local_speakers.append(_ch)
+                                scoped_known = sorted(set(_local_speakers))
+                                if "Narrator" not in scoped_known:
+                                    scoped_known.append("Narrator")
+                            except Exception:
+                                scoped_known = ["Narrator"]
                             fb_raw = call_frendli_fallback(
                                 system_prompt,
                                 seg.get("text", ""),
-                                known_characters=list(
-                                    state.known_characters or []),
+                                known_characters=scoped_known,
                             )
                             fb_lines = self._parse_jsonl(
                                 self._preclean_jsonl(fb_raw))
@@ -756,7 +960,12 @@ class OpenAIParser:
             merged_parsed_lines = _dedupe_chunk_boundaries(per_chunk_dialogues)
         except Exception:
             merged_parsed_lines = list(all_dialogues)
-        all_dialogues = deduplicate_lines(merged_parsed_lines)
+        if self.legacy_base_parser:
+            # Apply conservative exact dedup for legacy mode
+            all_dialogues = deduplicate_lines_exact(merged_parsed_lines)
+        else:
+            # Apply newer dedup behavior
+            all_dialogues = deduplicate_lines(merged_parsed_lines)
 
         # Reconcile adjacent same-speaker lines
         reconciled: List[Dict[str, Any]] = []
@@ -779,126 +988,132 @@ class OpenAIParser:
 
         # --- Safeguard: re-inject missing input lines as Narrator (ambiguous) ---
         try:
-            from .fallback_utils import _split_sentences as _split_sents, _normalize_text as _norm
-            sent_infos: List[Dict[str, Any]] = _split_sents(raw_text)
+            full_text = raw_text
+            if self.legacy_base_parser:
+                # Use simple narrator reinjection that guarantees 100% sentence coverage
+                reconciled = self._simple_reinject_missing_as_narrator(
+                    full_text, reconciled)
+            else:
+                from .fallback_utils import _split_sentences as _split_sents, _normalize_text as _norm
+                sent_infos: List[Dict[str, Any]] = _split_sents(raw_text)
 
-            present = [_norm(d.get("text", "")) for d in reconciled]
-            present_set = {p for p in present if p}
+                present = [_norm(d.get("text", "")) for d in reconciled]
+                present_set = {p for p in present if p}
 
-            import re as _re
+                import re as _re
 
-            def _extract_quotes(s: str) -> List[str]:
-                qs: List[str] = []
-                try:
-                    for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
-                        for m in _re.findall(pat, s):
-                            if m and m.strip():
-                                qs.append(_norm(m))
-                except Exception:
-                    pass
-                return qs
+                def _extract_quotes(s: str) -> List[str]:
+                    qs: List[str] = []
+                    try:
+                        for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
+                            for m in _re.findall(pat, s):
+                                if m and m.strip():
+                                    qs.append(_norm(m))
+                    except Exception:
+                        pass
+                    return qs
 
-            missing_indices: List[int] = []
-            for si in sent_infos:
-                s_norm = si.get("norm", "")
-                if not s_norm:
-                    continue
-                covered = (s_norm in present_set) or any(
-                    (s_norm in p or p in s_norm) for p in present_set)
-                if not covered and self.REINJECT_STRICT:
-                    quotes = _extract_quotes(si.get("text", ""))
-                    if quotes and any(q in present_set for q in quotes):
-                        covered = True
-                if not covered:
-                    missing_indices.append(si["index"])
-
-            groups: List[Tuple[int, int]] = []
-            if missing_indices:
-                missing_indices = sorted(set(missing_indices))
-                start = prev = missing_indices[0]
-                for i in missing_indices[1:]:
-                    if i == prev + 1:
-                        prev = i
+                missing_indices: List[int] = []
+                for si in sent_infos:
+                    s_norm = si.get("norm", "")
+                    if not s_norm:
                         continue
+                    covered = (s_norm in present_set) or any(
+                        (s_norm in p or p in s_norm) for p in present_set)
+                    if not covered and self.REINJECT_STRICT:
+                        quotes = _extract_quotes(si.get("text", ""))
+                        if quotes and any(q in present_set for q in quotes):
+                            covered = True
+                    if not covered:
+                        missing_indices.append(si["index"])
+
+                groups: List[Tuple[int, int]] = []
+                if missing_indices:
+                    missing_indices = sorted(set(missing_indices))
+                    start = prev = missing_indices[0]
+                    for i in missing_indices[1:]:
+                        if i == prev + 1:
+                            prev = i
+                            continue
+                        groups.append((start, prev))
+                        start = prev = i
                     groups.append((start, prev))
-                    start = prev = i
-                groups.append((start, prev))
 
-            to_reinject: List[str] = []
-            for a, b in groups:
-                length = b - a + 1
-                # Allow single short narrative reinjection if under 12 tokens
-                sent_texts = [si["text"]
-                              for si in sent_infos if a <= si["index"] <= b]
-                avg_tokens = sum(len(t.split())
-                                 for t in sent_texts) / max(1, len(sent_texts))
-            # Instrumentation: reinjection group summary
-            try:
-                print(
-                    f"[REINJ_GROUP] span=({a},{b}) count={len(sent_texts)}", flush=True)
-                for _txt in sent_texts:
+                to_reinject: List[str] = []
+                for a, b in groups:
+                    length = b - a + 1
+                    # Allow single short narrative reinjection if under 12 tokens
+                    sent_texts = [si["text"]
+                                  for si in sent_infos if a <= si["index"] <= b]
+                    avg_tokens = sum(len(t.split())
+                                     for t in sent_texts) / max(1, len(sent_texts))
+                # Instrumentation: reinjection group summary
+                try:
                     print(
-                        f"    [REINJ_LINE] text='{(_txt or '')[:80]}'", flush=True)
-            except Exception:
-                pass
-                if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
-                    if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
-                        try:
-                            print(
-                                f"[DIAG][REINJECT] single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
-                        except Exception:
-                            pass
-                    for si in sent_infos:
-                        if a <= si["index"] <= b:
-                            to_reinject.append(si["text"])
-
-            _diag_reinj_considered_total += len(sent_infos)
-            try:
-                print(
-                    f"[DIAG] Reinjection considered sentences: {len(sent_infos)}", flush=True)
-                print(
-                    f"[DIAG] Reinjection: will add {len(to_reinject)} sentence(s)", flush=True)
-            except Exception:
-                pass
-            for m in to_reinject:
-                # infer character contextually from last speaker; default Narrator
-                try:
-                    last_char = reconciled[-1]["character"] if reconciled else "Narrator"
-                except Exception:
-                    last_char = "Narrator"
-                txt_lower = (m or "").lower()
-                char_guess = last_char
-                try:
-                    if any(w in txt_lower for w in ["“", '"', " said", "asked", "whispered", "replied", "murmured", "moaned", "commanded"]) and last_char not in ("Narrator", "Ambiguous"):
-                        char_guess = last_char
-                    elif (m or "").strip().startswith(("“", '"')):
-                        # quote but no clear attribution
-                        char_guess = "Ambiguous" if last_char in (
-                            "Narrator", "Ambiguous") else last_char
-                    else:
-                        char_guess = "Narrator"
-                except Exception:
-                    char_guess = last_char or "Narrator"
-                reconciled.append({
-                    "character": char_guess,
-                    "emotions": ["neutral", "calm"],
-                    "text": m,
-                    "id": f"reinjected-{abs(hash(m))}",
-                    "_src": "reinj",
-                })
-                try:
-                    reason = "prev" if char_guess not in ("Narrator", "Ambiguous") else (
-                        "quote-no-speaker" if (m or "").strip().startswith(("“", '"')) else "none")
-                    print(
-                        f"[REINJ_FIX] text='{(m or '')[:80]}' char_guess={char_guess} reason={reason}",
-                        flush=True,
-                    )
+                        f"[REINJ_GROUP] span=({a},{b}) count={len(sent_texts)}", flush=True)
+                    for _txt in sent_texts:
+                        print(
+                            f"    [REINJ_LINE] text='{(_txt or '')[:80]}'", flush=True)
                 except Exception:
                     pass
-            _diag_reinj_added_total += len(to_reinject)
-            if to_reinject:
-                warnings.append(
-                    f"Re-injected {len(to_reinject)} missing sentence(s) as Narrator.")
+                    if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
+                        if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
+                            try:
+                                print(
+                                    f"[DIAG][REINJECT] single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
+                            except Exception:
+                                pass
+                        for si in sent_infos:
+                            if a <= si["index"] <= b:
+                                to_reinject.append(si["text"])
+
+                _diag_reinj_considered_total += len(sent_infos)
+                try:
+                    print(
+                        f"[DIAG] Reinjection considered sentences: {len(sent_infos)}", flush=True)
+                    print(
+                        f"[DIAG] Reinjection: will add {len(to_reinject)} sentence(s)", flush=True)
+                except Exception:
+                    pass
+                for m in to_reinject:
+                    # infer character contextually from last speaker; default Narrator
+                    try:
+                        last_char = reconciled[-1]["character"] if reconciled else "Narrator"
+                    except Exception:
+                        last_char = "Narrator"
+                    txt_lower = (m or "").lower()
+                    char_guess = last_char
+                    try:
+                        if any(w in txt_lower for w in ["“", '"', " said", "asked", "whispered", "replied", "murmured", "moaned", "commanded"]) and last_char not in ("Narrator", "Ambiguous"):
+                            char_guess = last_char
+                        elif (m or "").strip().startswith(("“", '"')):
+                            # quote but no clear attribution
+                            char_guess = "Ambiguous" if last_char in (
+                                "Narrator", "Ambiguous") else last_char
+                        else:
+                            char_guess = "Narrator"
+                    except Exception:
+                        char_guess = last_char or "Narrator"
+                    reconciled.append({
+                        "character": char_guess,
+                        "emotions": ["neutral", "calm"],
+                        "text": m,
+                        "id": f"reinjected-{abs(hash(m))}",
+                        "_src": "reinj",
+                    })
+                    try:
+                        reason = "prev" if char_guess not in ("Narrator", "Ambiguous") else (
+                            "quote-no-speaker" if (m or "").strip().startswith(("“", '"')) else "none")
+                        print(
+                            f"[REINJ_FIX] text='{(m or '')[:80]}' char_guess={char_guess} reason={reason}",
+                            flush=True,
+                        )
+                    except Exception:
+                        pass
+                _diag_reinj_added_total += len(to_reinject)
+                if to_reinject:
+                    warnings.append(
+                        f"Re-injected {len(to_reinject)} missing sentence(s) as Narrator.")
         except Exception as _se:
             # Never fail the main flow due to safeguard
             try:
@@ -1215,8 +1430,21 @@ class OpenAIParser:
                                 f"[DIAG] Fallback segment text (len={len(_seg_text)}): {_seg_text[:300]}", flush=True)
                             print(
                                 f"[DIAG] Passing known_characters to fallback: True", flush=True)
+                            # Scope known characters to current chunk's active speakers (+Narrator)
+                            try:
+                                _local_speakers = []
+                                for _obj in (fixed or []):
+                                    _ch = str((_obj or {}).get(
+                                        "character", "")).strip()
+                                    if _ch and _ch.lower() not in ("narrator", "ambiguous", "rejected"):
+                                        _local_speakers.append(_ch)
+                                scoped_known = sorted(set(_local_speakers))
+                                if "Narrator" not in scoped_known:
+                                    scoped_known.append("Narrator")
+                            except Exception:
+                                scoped_known = ["Narrator"]
                             fb_raw = call_frendli_fallback(
-                                system_prompt, seg.get("text", ""), known_characters=list(state.known_characters or []))
+                                system_prompt, seg.get("text", ""), known_characters=scoped_known)
                             print(
                                 f"[DEBUG] Fallback raw returned length={len(fb_raw)}", flush=True)
                             if idx == total - 1:
@@ -1352,80 +1580,84 @@ class OpenAIParser:
 
                 # --- Streaming safeguard: re-inject missing sentences from this chunk as Narrator ---
                 try:
-                    from .fallback_utils import _split_sentences as _split_sents, _normalize_text as _norm
-                    sent_infos = _split_sents(ch.text)
-                    present = {_norm(d.get("text", "")) for d in filtered}
-                    reinjected = 0
-                    print(
-                        f"[DIAG] Streaming reinjection: considered={len(sent_infos)}", flush=True)
-                    import re as _re
+                    if self.legacy_base_parser:
+                        filtered = self._simple_reinject_missing_as_narrator(
+                            ch.text, filtered)
+                    else:
+                        from .fallback_utils import _split_sentences as _split_sents, _normalize_text as _norm
+                        sent_infos = _split_sents(ch.text)
+                        present = {_norm(d.get("text", "")) for d in filtered}
+                        reinjected = 0
+                        print(
+                            f"[DIAG] Streaming reinjection: considered={len(sent_infos)}", flush=True)
+                        import re as _re
 
-                    def _extract_quotes(s: str) -> list[str]:
-                        qs: list[str] = []
-                        for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
-                            for m in _re.findall(pat, s or ""):
-                                if m and m.strip():
-                                    qs.append(_norm(m))
-                        return qs
-                    missing_idx: list[int] = []
-                    for si in sent_infos:
-                        s_norm = si.get("norm", "")
-                        if not s_norm:
-                            continue
-                        covered = (s_norm in present) or any(
-                            (s_norm in p or p in s_norm) for p in present)
-                        if not covered and self.REINJECT_STRICT:
-                            qs = _extract_quotes(si.get("text", ""))
-                            if qs and any(q in present for q in qs):
-                                covered = True
-                        if not covered:
-                            missing_idx.append(si["index"])
-                    # group and apply min gap >= 2 when strict
-                    groups: list[tuple[int, int]] = []
-                    if missing_idx:
-                        missing_idx = sorted(set(missing_idx))
-                        start = prev = missing_idx[0]
-                        for i in missing_idx[1:]:
-                            if i == prev + 1:
-                                prev = i
+                        def _extract_quotes(s: str) -> list[str]:
+                            qs: list[str] = []
+                            for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
+                                for m in _re.findall(pat, s or ""):
+                                    if m and m.strip():
+                                        qs.append(_norm(m))
+                            return qs
+                        missing_idx: list[int] = []
+                        for si in sent_infos:
+                            s_norm = si.get("norm", "")
+                            if not s_norm:
                                 continue
+                            covered = (s_norm in present) or any(
+                                (s_norm in p or p in s_norm) for p in present)
+                            if not covered and self.REINJECT_STRICT:
+                                qs = _extract_quotes(si.get("text", ""))
+                                if qs and any(q in present for q in qs):
+                                    covered = True
+                            if not covered:
+                                missing_idx.append(si["index"])
+                        # group and apply min gap >= 2 when strict
+                        groups: list[tuple[int, int]] = []
+                        if missing_idx:
+                            missing_idx = sorted(set(missing_idx))
+                            start = prev = missing_idx[0]
+                            for i in missing_idx[1:]:
+                                if i == prev + 1:
+                                    prev = i
+                                    continue
+                                groups.append((start, prev))
+                                start = prev = i
                             groups.append((start, prev))
-                            start = prev = i
-                        groups.append((start, prev))
-                    for a, b in groups:
-                        length = b - a + 1
-                        # Allow single short narrative reinjection if under 12 tokens
-                        sent_texts = [si["text"]
-                                      for si in sent_infos if a <= si["index"] <= b]
-                        avg_tokens = sum(len(t.split())
-                                         for t in sent_texts) / max(1, len(sent_texts))
-                        if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
-                            if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
-                                try:
-                                    print(
-                                        f"[DIAG][REINJECT] (streaming) single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
-                                except Exception:
-                                    pass
-                            for si in sent_infos:
-                                if a <= si["index"] <= b:
-                                    filtered.append({
-                                        "character": "Narrator",
-                                        "emotions": ["neutral", "calm"],
-                                        "text": si["text"],
-                                        "id": f"reinjected-{abs(hash(si['text']))}",
-                                        "_src": "reinj",
-                                    })
-                                    reinjected += 1
+                        for a, b in groups:
+                            length = b - a + 1
+                            # Allow single short narrative reinjection if under 12 tokens
+                            sent_texts = [si["text"]
+                                          for si in sent_infos if a <= si["index"] <= b]
+                            avg_tokens = sum(len(t.split())
+                                             for t in sent_texts) / max(1, len(sent_texts))
+                            if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
+                                if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
                                     try:
-                                        _samples = [d.get("text", "")
-                                                    for d in filtered[:2]]
                                         print(
-                                            f"[DIAG] Streaming reinjected (strict): '{(si['text'] or '')[:120]}' | samples={_samples}", flush=True)
+                                            f"[DIAG][REINJECT] (streaming) single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
                                     except Exception:
                                         pass
-                    if reinjected:
-                        warnings.append(
-                            f"Streaming: re-injected {reinjected} missing sentence(s) as Narrator.")
+                                for si in sent_infos:
+                                    if a <= si["index"] <= b:
+                                        filtered.append({
+                                            "character": "Narrator",
+                                            "emotions": ["neutral", "calm"],
+                                            "text": si["text"],
+                                            "id": f"reinjected-{abs(hash(si['text']))}",
+                                            "_src": "reinj",
+                                        })
+                                        reinjected += 1
+                                        try:
+                                            _samples = [d.get("text", "")
+                                                        for d in filtered[:2]]
+                                            print(
+                                                f"[DIAG] Streaming reinjected (strict): '{(si['text'] or '')[:120]}' | samples={_samples}", flush=True)
+                                        except Exception:
+                                            pass
+                        if reinjected:
+                            warnings.append(
+                                f"Streaming: re-injected {reinjected} missing sentence(s) as Narrator.")
                 except Exception:
                     pass
                 # Final purge of REJECTED lines before yielding (streaming)

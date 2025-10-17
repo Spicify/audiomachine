@@ -385,148 +385,77 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
     return filtered
 
 
-def replace_or_insert_lines(dialogues, start_index, new_lines, end_index=None):
+def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=None, logger=None):
     """
-    Inserts or replaces fallback-parsed lines into dialogues list using semantic overlap and content anchoring.
-    The start/end indices are treated as sentence anchors, not direct list positions.
+    Insert or replace lines with priority:
+    1) Per-line `_span_start` (deterministic).
+    2) Group-level positional guess (start_index/end_index clamped).
+    3) Fuzzy content anchor near the guessed position.
+    4) Final fallback: tail-append.
     """
-    try:
-        span = f"[{start_index}:{(end_index if end_index is not None else start_index)+1}]"
-        print(
-            f"[DEBUG] Inserting {len(new_lines)} line(s) at span {span}", flush=True)
-    except Exception:
-        pass
-    if end_index is None:
-        end_index = start_index
+    import re
+    from difflib import SequenceMatcher
 
     def _n(s: str) -> str:
-        return _normalize_text(s or "")
+        if not s:
+            return ""
+        s = s.replace("\u201C", '"').replace("\u201D", '"')
+        s = s.replace("\u2018", "'").replace("\u2019", "'")
+        s = re.sub(r"\s+", " ", s).strip().lower()
+        return s
 
-    # Diagnostics: snapshot before
-    try:
-        _lo = max(0, start_index - 2)
-        _hi = min(len(dialogues),
-                  (end_index if end_index is not None else start_index) + 3)
-        _before = [(i, str(dialogues[i].get("character", "")), (dialogues[i].get(
-            "text", "") or "")[:80]) for i in range(_lo, _hi)]
-        print(
-            f"[DIAG] Before replace/insert slice {_lo}:{_hi}: {_before}", flush=True)
-    except Exception:
-        pass
+    def _clamp(i: int, lo: int, hi: int) -> int:
+        return max(lo, min(i, hi))
 
-    new_norms = [_n(nl.get("text", ""))
-                 for nl in (new_lines or []) if (nl and nl.get("text"))]
-    # Remove semantic overlaps and REJECTED anywhere in dialogues
-    i = 0
-    while i < len(dialogues):
-        try:
-            d = dialogues[i]
-            if str(d.get("character", "")).upper() == "REJECTED":
-                del dialogues[i]
-                continue
-            dnorm = _n(d.get("text", ""))
-            if dnorm and any((dnorm == nn or dnorm in nn or nn in dnorm) for nn in new_norms):
-                del dialogues[i]
-                continue
-        except Exception:
-            pass
-        i += 1
+    # 1) If ALL new_lines carry _span_start → deterministic inserts in-order
+    if all(isinstance(o, dict) and "_span_start" in o for o in (new_lines or [])):
+        for o in new_lines:
+            pos = _clamp(int(o.get("_span_start", len(dialogues))),
+                         0, len(dialogues))
+            if logger:
+                logger(
+                    f"[REINJ_LINE] pos={pos} speaker={o.get('character','?')} text={o.get('text','')[:60]}")
+            dialogues[pos:pos] = [o]
+        return dialogues
 
-    # If per-line span provided, insert each line at its own position
-    try:
-        has_spans = any(isinstance(nl, dict) and nl.get(
-            "_span_start") is not None for nl in (new_lines or []))
-    except Exception:
-        has_spans = False
-    if has_spans:
-        for nl in (new_lines or []):
-            try:
-                pos_raw = nl.get("_span_start", 0)
-                pos = int(pos_raw) if isinstance(pos_raw, (int, str)) else 0
-            except Exception:
-                pos = 0
-            pos = max(0, min(pos, len(dialogues)))
-            dialogues[pos:pos] = [nl]
-            try:
-                print(
-                    f"[REINJ_LINE] pos={pos} span=[{start_index}:{(end_index if end_index is not None else start_index)+1}] speaker={str(nl.get('character',''))} text='{(nl.get('text','') or '')[:80]}'",
-                    flush=True,
-                )
-            except Exception:
-                pass
-        # Maintain anchor summary log for visibility
-        try:
-            _first = (new_norms[0] if new_norms else "")
-            print(
-                f"[REINJ_ANCHOR] first_new='{_first[:80]}' insert_at=per-line tail_append=False",
-                flush=True,
-            )
-        except Exception:
-            pass
+    # 2) Group-level positional guess
+    approx_pos = None
+    if isinstance(start_index, int):
+        approx_pos = _clamp(start_index, 0, len(dialogues))
+    elif isinstance(end_index, int):
+        approx_pos = _clamp(end_index, 0, len(dialogues))
     else:
-        # Determine insertion point by content anchoring using the first new line
-        insert_at = None
-        first_new = new_norms[0] if new_norms else ""
-        if first_new:
-            for j in range(len(dialogues) - 1, -1, -1):
-                try:
-                    dnorm = _n(dialogues[j].get("text", ""))
-                    if dnorm and (dnorm in first_new or first_new in dnorm):
-                        insert_at = j + 1
-                        break
-                except Exception:
-                    continue
-        if insert_at is None:
-            # try positional guess based on start_idx if available
-            approx_index = (
-                new_lines[0].get("_span_start", None)
-                if isinstance(new_lines, list) and new_lines and isinstance(new_lines[0], dict)
-                else None
-            )
-            if approx_index is not None and int(approx_index) >= 0:
-                insert_at = min(int(approx_index), len(dialogues))
-                try:
-                    print(
-                        f"[REINJ_ANCHOR] fallback positional insert at {insert_at}", flush=True)
-                except Exception:
-                    pass
-            else:
-                insert_at = len(dialogues)
-                try:
-                    print(
-                        f"[REINJ_ANCHOR] no anchor found; tail_append=True", flush=True)
-                except Exception:
-                    pass
+        approx_pos = len(dialogues)  # tail as last resort
 
-        # Instrumentation: log anchor decision
-        try:
-            print(
-                f"[REINJ_ANCHOR] first_new='{first_new[:80]}' insert_at={insert_at} tail_append={insert_at==len(dialogues)}",
-                flush=True,
-            )
-        except Exception:
-            pass
+    # Try to anchor the FIRST new line near approx_pos
+    first_txt = _n((new_lines[0] or {}).get("text", "")) if new_lines else ""
+    anchor_pos = None
 
-        dialogues[insert_at:insert_at] = list(new_lines or [])
+    # 2a) Direct positional insert if we have no text to match
+    if not first_txt:
+        anchor_pos = approx_pos
+    else:
+        # 3) Fuzzy search in a local window around approx_pos
+        window = 8
+        best_i, best_sim = None, 0.0
+        for i in range(max(0, approx_pos - window), min(len(dialogues), approx_pos + window + 1)):
+            cand = _n((dialogues[i] or {}).get("text", ""))
+            if not cand:
+                continue
+            if first_txt in cand or cand in first_txt:
+                best_i, best_sim = i, 1.0
+                break
+            sim = SequenceMatcher(None, cand, first_txt).ratio()
+            if sim > best_sim:
+                best_i, best_sim = i, sim
+        if best_i is not None and best_sim >= 0.80:
+            anchor_pos = best_i
+        else:
+            anchor_pos = approx_pos  # fall back to positional guess
 
-    # Diagnostics: snapshot after
-    try:
-        _lo2 = max(0, (insert_at if 'insert_at' in locals()
-                   and insert_at is not None else 0) - 2)
-        _hi2 = min(len(dialogues), ((insert_at if 'insert_at' in locals()
-                   and insert_at is not None else 0) + len(new_lines) + 3))
-        _after = [(i, str(dialogues[i].get("character", "")), (dialogues[i].get(
-            "text", "") or "")[:80]) for i in range(_lo2, _hi2)]
-        print(
-            f"[DIAG] After replace/insert slice {_lo2}:{_hi2}: {_after}", flush=True)
-    except Exception:
-        pass
-
-    # Instrumentation: log reinjection result
-    try:
-        print(
-            f"[REINJ_RESULT] total_inserted={len(new_lines)} final_len={len(dialogues)}",
-            flush=True,
-        )
-    except Exception:
-        pass
+    # Insert preserving order starting at anchor_pos
+    if logger:
+        logger(
+            f"[REINJ_LINE] pos={anchor_pos} (positional-first) text='{(new_lines[0] or {}).get('text','')[:60]}'")
+    dialogues[anchor_pos:anchor_pos] = new_lines
+    return dialogues

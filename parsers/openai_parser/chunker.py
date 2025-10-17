@@ -224,3 +224,38 @@ def diag_consume_dedup_conflicts(max_items: int | None = None) -> List[Tuple[str
         return out
     except Exception:
         return []
+
+
+def deduplicate_lines_exact(lines: list) -> list:
+    """
+    Legacy, conservative de-dup:
+    - Build a key from (character, normalized text)
+    - Keep first occurrence, drop exact/near-exact repeats only
+    - No speaker preference heuristics
+    """
+    import re
+    from difflib import SequenceMatcher
+
+    def _norm(s: str) -> str:
+        return re.sub(r"\s+", " ", s or "").strip().lower()
+
+    seen = []
+    out = []
+    for obj in lines:
+        ch = (obj or {}).get("character", "")
+        tx = (obj or {}).get("text", "")
+        key = (ch.strip().lower(), _norm(tx))
+        # exact seen?
+        if key in seen:
+            continue
+        # light near-dup guard: if any seen text is ~identical, drop
+        is_near_dup = False
+        for sch, stx in seen:
+            if sch == key[0] and SequenceMatcher(None, key[1], stx).ratio() >= 0.98:
+                is_near_dup = True
+                break
+        if is_near_dup:
+            continue
+        seen.append(key)
+        out.append(obj)
+    return out
