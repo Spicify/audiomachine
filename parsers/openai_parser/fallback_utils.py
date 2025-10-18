@@ -3,6 +3,7 @@ from openai import OpenAI
 import time
 import re
 from dotenv import load_dotenv
+from utils.text_normalizer import normalize_text as _norm_for_compare
 
 # Ensure .env is loaded before reading environment variables
 load_dotenv()
@@ -143,10 +144,7 @@ def _extract_quotes(text: str) -> list[str]:
     return out
 
 
-def _norm_for_compare(s: str) -> str:
-    s = _normalize_text(s)
-    # strip surrounding quotes and collapse spaces are already done in _normalize_text
-    return s.rstrip('.,;:!?')
+# Shared normalizer is imported as _norm_for_compare
 
 
 def _token_jaccard(a: str, b: str) -> float:
@@ -167,6 +165,17 @@ def _edit_ratio(a: str, b: str) -> float:
         return 0.0
 
 
+def _sanitize_character(line: dict, known_characters: list[str] | None) -> dict:
+    ch = str((line or {}).get("character", "")).strip()
+    allowed = set((known_characters or [])) | {"Narrator", "Ambiguous"}
+    if ch and ch not in allowed:
+        line["character"] = "Ambiguous"
+        # keep candidates small; optional
+        if not line.get("candidates"):
+            line["candidates"] = list((known_characters or [])[:5])
+    return line
+
+
 def filter_fallback_lines(segment_text: str, candidate_lines: list[dict]) -> list[dict]:
     """Filter Friendli candidate lines against the source segment with robust fuzzy match.
 
@@ -177,35 +186,78 @@ def filter_fallback_lines(segment_text: str, candidate_lines: list[dict]) -> lis
     Logs one [FB_FUZZY] per candidate.
     """
     src_quotes = _extract_quotes(segment_text)
-    src = src_quotes[0] if src_quotes else segment_text
-    src_n = _norm_for_compare(src)
-    kept: list[dict] = []
-    for ln in candidate_lines or []:
-        txt = (ln or {}).get("text", "")
-        cand_n = _norm_for_compare(txt)
-        jacc = _token_jaccard(src_n, cand_n)
-        edit = _edit_ratio(src_n, cand_n)
-        cand_tokens = len((cand_n or "").split())
-        keep = False
-        if edit >= 0.55:
-            keep = True
-        elif cand_tokens < 6 and jacc >= 0.6:
-            keep = True
-        else:
-            both_short = len((src_n or "").split()) <= 4 and cand_tokens <= 4
-            shared = jacc > 0.0
-            if both_short and shared:
+    source_text = src_quotes[0] if src_quotes else segment_text
+    src_n = _norm_for_compare(source_text or "")
+    # inside filter_fallback_lines(...)
+    kept = []
+    first_scored = None
+    try:
+        src_n = _norm_for_compare(source_text or "")
+        for idx, ln in enumerate(candidate_lines or []):
+            txt = (ln or {}).get("text", "")
+            cand_n = _norm_for_compare(txt)
+            jacc = _token_jaccard(src_n, cand_n)
+            edit = _edit_ratio(src_n, cand_n)
+            cand_tokens = len((cand_n or "").split())
+
+            keep = False
+            if edit >= 0.55:
                 keep = True
+            elif cand_tokens < 6 and jacc >= 0.6:
+                keep = True
+            else:
+                both_short = len((src_n or "").split()
+                                 ) <= 4 and cand_tokens <= 4
+                shared = jacc > 0.0
+                if both_short and shared:
+                    keep = True
+
+            # debug print for each candidate
+            try:
+                print(
+                    f"[FB_FUZZY] src='{(source_text or '')[:60]}' cand='{(txt or '')[:60]}' jacc={jacc:.2f} edit={edit:.2f} keep={keep}",
+                    flush=True,
+                )
+            except Exception:
+                pass
+
+            # record top candidate's decision (idx==0)
+            if idx == 0:
+                first_scored = (keep, jacc, edit, (source_text or '')[
+                                :60], (txt or '')[:60])
+
+            if keep:
+                kept.append(ln)
+
+        # after loop, if top candidate was rejected, log it once
+        if first_scored and not first_scored[0]:
+            try:
+                print(
+                    f"[REINJ_REJECT] reason=fuzzy_below_thresh src='{first_scored[3]}' top='{first_scored[4]}' jacc={first_scored[1]:.2f} edit={first_scored[2]:.2f}",
+                    flush=True,
+                )
+            except Exception:
+                pass
+
+        return kept
+
+    except Exception as e:
+        import traceback as _tb
+        cause = f"{type(e).__name__}: {e}"
+        here = _tb.extract_tb(e.__traceback__)[-1] if e.__traceback__ else None
+        loc = f"{getattr(here, 'filename', 'unknown')}:{getattr(here, 'lineno', '?')}"
         try:
             print(
-                f"[FB_FUZZY] src='{src_n[:60]}' cand='{cand_n[:60]}' jacc={jacc:.2f} edit={edit:.2f} keep={keep}",
-                flush=True,
-            )
+                f"[EXC_TRACE] stage=fallback_validation error='{cause}' at={loc}", flush=True)
         except Exception:
             pass
-        if keep:
-            kept.append(ln)
-    return kept
+        try:
+            from .openai_parser import DEBUG_PARSER_DIAG as _DBG
+        except Exception:
+            _DBG = False
+        if _DBG:
+            raise
+        return list(candidate_lines or [])
 
 
 _SENT_SPLIT_RX = re.compile(r'(?<=[.!?])\s+')
@@ -395,6 +447,10 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
     """
     import re
     from difflib import SequenceMatcher
+    try:
+        print(f"[REINJ_ARGS] new_lines_t={type(new_lines).__name__} new_len={len(new_lines) if isinstance(new_lines, list) else -1} start_t={type(start_index).__name__} end_t={type(end_index).__name__}", flush=True)
+    except Exception:
+        pass
 
     def _n(s: str) -> str:
         if not s:
@@ -432,12 +488,13 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
     anchor_pos = None
 
     # 2a) Direct positional insert if we have no text to match
+    best_i, best_sim = None, 0.0  # ensure defined for logging below
+
     if not first_txt:
         anchor_pos = approx_pos
     else:
         # 3) Fuzzy search in a local window around approx_pos
-        window = 8
-        best_i, best_sim = None, 0.0
+        window = 12
         for i in range(max(0, approx_pos - window), min(len(dialogues), approx_pos + window + 1)):
             cand = _n((dialogues[i] or {}).get("text", ""))
             if not cand:
@@ -448,14 +505,57 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
             sim = SequenceMatcher(None, cand, first_txt).ratio()
             if sim > best_sim:
                 best_i, best_sim = i, sim
+
         if best_i is not None and best_sim >= 0.80:
             anchor_pos = best_i
         else:
             anchor_pos = approx_pos  # fall back to positional guess
 
     # Insert preserving order starting at anchor_pos
+    try:
+        _reason = (
+            "tail" if anchor_pos == len(dialogues)
+            else ("fuzzy" if (best_i is not None and best_sim >= 0.80) else "positional")
+        )
+        print(
+            f"[REINJ_ANCHOR] approx_pos={approx_pos} anchor_pos={anchor_pos} reason={_reason}", flush=True)
+    except Exception:
+        pass
+
     if logger:
         logger(
             f"[REINJ_LINE] pos={anchor_pos} (positional-first) text='{(new_lines[0] or {}).get('text','')[:60]}'")
-    dialogues[anchor_pos:anchor_pos] = new_lines
+
+    # Clamp insertion index without affecting logs
+    insert_pos = anchor_pos
+    try:
+        # prevent big forward jumps unless it's a clear containment match
+        jump = insert_pos - approx_pos
+        if jump > 3:
+            _n = _norm_for_compare
+            first_txt_cmp = _n((new_lines[0] or {}).get("text", "") or "")
+            cand_txt_cmp = _n(
+                (dialogues[insert_pos] or {}).get("text", "") or "")
+            if not (first_txt_cmp and (first_txt_cmp in cand_txt_cmp or cand_txt_cmp in first_txt_cmp)):
+                insert_pos = min(len(dialogues), approx_pos + 1)
+    except Exception:
+        pass
+
+    try:
+        if anchor_pos == len(dialogues):
+            ft = _norm_for_compare((new_lines[0] or {}).get("text", "") or "")
+            if ft:
+                recent = dialogues[max(0, anchor_pos-50):anchor_pos]
+                for ln in recent:
+                    prev = _norm_for_compare((ln or {}).get("text", "") or "")
+                    if prev and (ft in prev or prev in ft):
+                        try:
+                            print("[REINJ_SKIP] reason=tail_dup", flush=True)
+                        except Exception:
+                            pass
+                        return dialogues
+    except Exception:
+        pass
+
+    dialogues[insert_pos:insert_pos] = new_lines
     return dialogues

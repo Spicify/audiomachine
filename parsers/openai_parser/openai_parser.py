@@ -31,8 +31,32 @@ from .fallback_utils import (
     replace_or_insert_lines,
     filter_fallback_lines,
 )
+from .fallback_utils import _sanitize_character
+from utils.text_normalizer import normalize_text as _norm_for_compare
 from utils.log_instrumentation import log_timed_action
 from utils.session_logger import log_to_session, log_exception
+
+# Diagnostics only; do not change behavior
+DEBUG_PARSER_DIAG = True  # diagnostics only; leave True for this run
+
+
+def _attr_counts(lines):
+    try:
+        total = len(lines or [])
+        narrator = sum(1 for d in (lines or []) if str(
+            d.get("character", "")).strip().lower() == "narrator")
+
+        def src(d): return str(d.get("_src", "")).strip().lower()
+        ai = sum(1 for d in (lines or []) if src(d) == "ai")
+        fb = sum(1 for d in (lines or []) if src(d) == "fb")
+        reinj = sum(1 for d in (lines or []) if src(d) == "reinj")
+        rejected = sum(1 for d in (lines or []) if str(d.get("character", "")).upper(
+        ) == "REJECTED" or str(d.get("_status", "")).upper() == "REJECTED")
+        unknown = sum(1 for d in (lines or []) if (d.get("character") and d.get(
+            "character") not in ("Narrator", "Ambiguous")) is False)
+        return {"total": total, "narrator": narrator, "ai": ai, "fb": fb, "reinj": reinj, "rejected": rejected, "unknown": unknown}
+    except Exception:
+        return {"total": 0, "narrator": 0, "ai": 0, "fb": 0, "reinj": 0, "rejected": 0, "unknown": 0}
 
 
 class DualLogger(io.TextIOBase):
@@ -254,6 +278,8 @@ class OpenAIParser:
 
     def _validate_and_fix(self, items: List[Dict[str, Any]], warnings: List[str], state: ParserState) -> Tuple[List[Dict[str, Any]], List[str]]:
         result: List[Dict[str, Any]] = []
+        base_valid = 0
+        base_rejected = 0
         for it in items:
             # [DIAG] Preserve REJECTED lines end-to-end so detection can trigger fallback
             try:
@@ -261,12 +287,49 @@ class OpenAIParser:
                     print("[DIAG] REJECTED line entering validator:",
                           (it.get("text", "") or "")[:60], flush=True)
                     result.append(it)
+                    base_rejected += 1
                     continue
             except Exception:
                 pass
             char = (it.get("character") or "").strip()
             txt = (it.get("text") or "").strip()
             ems = it.get("emotions") or []
+
+            # Minimal validation and coercions
+            allowed_chars = set(state.known_characters or []) | {
+                "Narrator", "Ambiguous"}
+            is_narr = (char.lower() == "narrator")
+
+            # character must be allowed → coerce unknown to Ambiguous
+            if char not in allowed_chars:
+                char = "Ambiguous"
+                try:
+                    it["character"] = "Ambiguous"
+                except Exception:
+                    pass
+
+            # require non-empty text
+            if not txt:
+                base_rejected += 1
+                continue
+
+            # exactly 2 emotions (strict)
+            if not isinstance(ems, list) or len(ems) != 2:
+                base_rejected += 1
+                continue
+
+            # Quotes rule: skip enforcement for Narrator; if the original required quotes, enforce here.
+            if not is_narr:
+                has_quote = ('"' in txt) or ("“" in txt and "”" in txt)
+                # If quote enforcement is desired, uncomment:
+                # if not has_quote:
+                #     base_rejected += 1
+                #     continue
+
+            # Accept with minimal changes
+            result.append({**it, "character": char})
+            base_valid += 1
+            continue
 
             # ensure 2 canonical emotions
             ems = ensure_two_emotions(
@@ -308,6 +371,11 @@ class OpenAIParser:
                 self.memory.push(fixed["character"], fixed["emotions"])
 
             result.append(fixed)
+        try:
+            print(
+                f"[VALIDATE] base_valid={base_valid} base_rejected={base_rejected}", flush=True)
+        except Exception:
+            pass
         return result, warnings
 
     def _parse_jsonl(self, raw_output: str) -> List[Dict[str, Any]]:
@@ -361,11 +429,11 @@ class OpenAIParser:
             return parts
 
         sents = _split_sentences_robust(chunk_text)
-        sent_norms = [self._normalize_text_for_match(s) for s in sents]
+        sent_norms = [_norm_for_compare(s) for s in sents]
 
         pos_map = {}  # sent_idx -> dialogue_pos
         for di, obj in enumerate(dialogues):
-            txt = self._normalize_text_for_match((obj or {}).get("text", ""))
+            txt = _norm_for_compare((obj or {}).get("text", ""))
             if not txt:
                 continue
             # find the best sentence idx that this dialogue most likely covers
@@ -629,6 +697,11 @@ class OpenAIParser:
                     })
 
             fixed, warnings = self._validate_and_fix(items, warnings, state)
+            try:
+                print(
+                    f"[ATTR_SUMMARY] phase=pre_fallback { _attr_counts(fixed) }", flush=True)
+            except Exception:
+                pass
             # Tag source for DIAG
             for _ln in fixed:
                 try:
@@ -723,7 +796,14 @@ class OpenAIParser:
                     pass
                 problem_segments = []
             if problem_segments:
-                for _seg_i, seg in enumerate(problem_segments, start=1):
+                # Apply segments in order of original start index and adjust positions with a running delta
+                try:
+                    _ordered_segments = sorted(
+                        problem_segments, key=lambda s: int(s.get("start_idx", 0)))
+                except Exception:
+                    _ordered_segments = list(problem_segments)
+                _running_delta = 0
+                for _seg_i, seg in enumerate(_ordered_segments, start=1):
                     try:
                         if idx == len(chunks) - 1:
                             print(
@@ -791,6 +871,11 @@ class OpenAIParser:
                                 pass
                         fb_lines = self._parse_jsonl(
                             self._preclean_jsonl(fb_raw))
+                        try:
+                            fb_lines = [_sanitize_character(
+                                x, sorted(list(state.known_characters))) for x in fb_lines]
+                        except Exception:
+                            pass
                         print(
                             f"[DEBUG] Fallback parsed {len(fb_lines)} line(s)", flush=True)
                         fb_valid, warnings = self._validate_and_fix(
@@ -820,6 +905,21 @@ class OpenAIParser:
                         try:
                             sent_to_pos = self._build_sentence_to_pos_map(
                                 ch.text, fixed)
+                            try:
+                                from .fallback_utils import _split_sentences as _dbg_split
+                                sents = _dbg_split(ch.text)
+                                mapped = len(sent_to_pos)
+                                total = len(sents)
+                                pct = (mapped/total*100.0) if total else 0.0
+                                unmapped = [i for i in range(
+                                    total) if i not in sent_to_pos][:5]
+                                print(
+                                    f"[MAP_COVERAGE] sent_count={total} mapped={mapped} pct={pct:.1f}%", flush=True)
+                                if unmapped:
+                                    print(
+                                        f"[MAP_UNMAPPED] idxes={unmapped}", flush=True)
+                            except Exception:
+                                pass
                             anchor_sent = int(seg.get("start_idx", 0))
                             pos = sent_to_pos.get(anchor_sent)
                             if pos is None:
@@ -835,6 +935,11 @@ class OpenAIParser:
                             for _ln in fb_valid:
                                 if isinstance(_ln, dict) and "_span_start" not in _ln:
                                     _ln["_span_start"] = int(pos)
+                        except Exception:
+                            pass
+                        try:
+                            print(
+                                f"[REINJ_CALL] fixed_len={len(fixed)} start_idx={seg.get('start_idx',0)} fb_valid_len={len(fb_valid)} end_idx={seg.get('end_idx', seg.get('start_idx',0))}", flush=True)
                         except Exception:
                             pass
                         if idx == len(chunks) - 1:
@@ -870,8 +975,34 @@ class OpenAIParser:
                             "parsed": len(fb_valid),
                             "unknown": _unknown_count,
                         })
-                        replace_or_insert_lines(fixed, seg.get("start_idx", 0), fb_valid, seg.get(
-                            "end_idx", seg.get("start_idx", 0)))
+                        try:
+                            print("[ATTR_SUMMARY] phase=post_fallback",
+                                  _attr_counts(fixed), flush=True)
+                        except Exception:
+                            pass
+                        try:
+                            logger = None
+                        except Exception:
+                            logger = None
+                        try:
+                            _base_pos = int(seg.get("start_idx", 0))
+                        except Exception:
+                            _base_pos = 0
+                        _approx_pos = _base_pos + _running_delta
+                        try:
+                            print(
+                                f"[REINJ_DELTA] base_pos={_base_pos} approx_pos={_approx_pos} delta={_running_delta}", flush=True)
+                        except Exception:
+                            pass
+                        if fb_valid:
+                            replace_or_insert_lines(
+                                dialogues=fixed,
+                                new_lines=fb_valid,
+                                start_index=_approx_pos,
+                                end_index=_approx_pos,
+                                logger=logger,
+                            )
+                            _running_delta += len(fb_valid)
                         if is_last_chunk:
                             print(
                                 f"[EOD][FB_SUMMARY] After filtering: kept={len(fb_valid)} lines for last chunk.", flush=True)
@@ -896,7 +1027,13 @@ class OpenAIParser:
                         "text": seg_text,
                         "kind": "rejected"
                     }]
-                    for seg in problem_segments:
+                    try:
+                        _ordered_segments2 = sorted(
+                            problem_segments, key=lambda s: int(s.get("start_idx", 0)))
+                    except Exception:
+                        _ordered_segments2 = list(problem_segments)
+                    _running_delta2 = 0
+                    for seg in _ordered_segments2:
                         try:
                             # Scope known characters to current chunk's active speakers (+Narrator)
                             try:
@@ -918,6 +1055,11 @@ class OpenAIParser:
                             )
                             fb_lines = self._parse_jsonl(
                                 self._preclean_jsonl(fb_raw))
+                            try:
+                                fb_lines = [_sanitize_character(
+                                    x, sorted(list(state.known_characters))) for x in fb_lines]
+                            except Exception:
+                                pass
                             fb_valid, warnings = self._validate_and_fix(
                                 fb_lines, warnings, state)
                             # Propagate span start for positional reinsertion (streaming)
@@ -933,12 +1075,29 @@ class OpenAIParser:
                                     _ln.setdefault("_src", "fb")
                                 except Exception:
                                     pass
-                            replace_or_insert_lines(
-                                fixed,
-                                seg.get("start_idx", 0),
-                                fb_valid,
-                                seg.get("end_idx", seg.get("start_idx", 0)),
-                            )
+                            try:
+                                logger = None
+                            except Exception:
+                                logger = None
+                            try:
+                                _base_pos = int(seg.get("start_idx", 0))
+                            except Exception:
+                                _base_pos = 0
+                            _approx_pos = _base_pos + _running_delta2
+                            try:
+                                print(
+                                    f"[REINJ_DELTA] base_pos={_base_pos} approx_pos={_approx_pos} delta={_running_delta2}", flush=True)
+                            except Exception:
+                                pass
+                            if fb_valid:
+                                replace_or_insert_lines(
+                                    dialogues=fixed,
+                                    new_lines=fb_valid,
+                                    start_index=_approx_pos,
+                                    end_index=_approx_pos,
+                                    logger=logger,
+                                )
+                                _running_delta2 += len(fb_valid)
                         except Exception as _fe:
                             print(
                                 f"[DIAG] Forced fallback failed: {_fe}", flush=True)
@@ -960,12 +1119,20 @@ class OpenAIParser:
             merged_parsed_lines = _dedupe_chunk_boundaries(per_chunk_dialogues)
         except Exception:
             merged_parsed_lines = list(all_dialogues)
+
         if self.legacy_base_parser:
             # Apply conservative exact dedup for legacy mode
             all_dialogues = deduplicate_lines_exact(merged_parsed_lines)
         else:
             # Apply newer dedup behavior
             all_dialogues = deduplicate_lines(merged_parsed_lines)
+
+        try:
+            print("[PIPE] order=detect→fallback→dedup ok=True", flush=True)
+            print(
+                f"[ATTR_SUMMARY] phase=post_dedup { _attr_counts(all_dialogues) }", flush=True)
+        except Exception:
+            pass
 
         # Reconcile adjacent same-speaker lines
         reconciled: List[Dict[str, Any]] = []
@@ -994,126 +1161,127 @@ class OpenAIParser:
                 reconciled = self._simple_reinject_missing_as_narrator(
                     full_text, reconciled)
             else:
-                from .fallback_utils import _split_sentences as _split_sents, _normalize_text as _norm
+                from .fallback_utils import _split_sentences as _split_sents
                 sent_infos: List[Dict[str, Any]] = _split_sents(raw_text)
 
-                present = [_norm(d.get("text", "")) for d in reconciled]
+                present = [_norm_for_compare(d.get("text", ""))
+                           for d in reconciled]
                 present_set = {p for p in present if p}
 
-                import re as _re
+            import re as _re
 
-                def _extract_quotes(s: str) -> List[str]:
-                    qs: List[str] = []
-                    try:
-                        for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
-                            for m in _re.findall(pat, s):
-                                if m and m.strip():
-                                    qs.append(_norm(m))
-                    except Exception:
-                        pass
-                    return qs
+            def _extract_quotes(s: str) -> List[str]:
+                qs: List[str] = []
+                try:
+                    for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
+                        for m in _re.findall(pat, s):
+                            if m and m.strip():
+                                qs.append(_norm_for_compare(m))
+                except Exception:
+                    pass
+                return qs
 
-                missing_indices: List[int] = []
-                for si in sent_infos:
-                    s_norm = si.get("norm", "")
-                    if not s_norm:
+            missing_indices: List[int] = []
+            for si in sent_infos:
+                s_norm = si.get("norm", "")
+                if not s_norm:
+                    continue
+                covered = (s_norm in present_set) or any(
+                    (s_norm in p or p in s_norm) for p in present_set)
+                if not covered and self.REINJECT_STRICT:
+                    quotes = _extract_quotes(si.get("text", ""))
+                    if quotes and any(q in present_set for q in quotes):
+                        covered = True
+                if not covered:
+                    missing_indices.append(si["index"])
+
+            groups: List[Tuple[int, int]] = []
+            if missing_indices:
+                missing_indices = sorted(set(missing_indices))
+                start = prev = missing_indices[0]
+                for i in missing_indices[1:]:
+                    if i == prev + 1:
+                        prev = i
                         continue
-                    covered = (s_norm in present_set) or any(
-                        (s_norm in p or p in s_norm) for p in present_set)
-                    if not covered and self.REINJECT_STRICT:
-                        quotes = _extract_quotes(si.get("text", ""))
-                        if quotes and any(q in present_set for q in quotes):
-                            covered = True
-                    if not covered:
-                        missing_indices.append(si["index"])
-
-                groups: List[Tuple[int, int]] = []
-                if missing_indices:
-                    missing_indices = sorted(set(missing_indices))
-                    start = prev = missing_indices[0]
-                    for i in missing_indices[1:]:
-                        if i == prev + 1:
-                            prev = i
-                            continue
-                        groups.append((start, prev))
-                        start = prev = i
                     groups.append((start, prev))
+                    start = prev = i
+                groups.append((start, prev))
 
-                to_reinject: List[str] = []
-                for a, b in groups:
-                    length = b - a + 1
-                    # Allow single short narrative reinjection if under 12 tokens
-                    sent_texts = [si["text"]
-                                  for si in sent_infos if a <= si["index"] <= b]
-                    avg_tokens = sum(len(t.split())
-                                     for t in sent_texts) / max(1, len(sent_texts))
-                # Instrumentation: reinjection group summary
-                try:
+            to_reinject: List[str] = []
+            for a, b in groups:
+                length = b - a + 1
+                # Allow single short narrative reinjection if under 12 tokens
+                sent_texts = [si["text"]
+                              for si in sent_infos if a <= si["index"] <= b]
+                avg_tokens = sum(len(t.split())
+                                 for t in sent_texts) / max(1, len(sent_texts))
+            # Instrumentation: reinjection group summary
+            try:
+                print(
+                    f"[REINJ_GROUP] span=({a},{b}) count={len(sent_texts)}", flush=True)
+                for _txt in sent_texts:
                     print(
-                        f"[REINJ_GROUP] span=({a},{b}) count={len(sent_texts)}", flush=True)
-                    for _txt in sent_texts:
-                        print(
-                            f"    [REINJ_LINE] text='{(_txt or '')[:80]}'", flush=True)
+                        f"    [REINJ_LINE] text='{(_txt or '')[:80]}'", flush=True)
+            except Exception:
+                pass
+                if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
+                    if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
+                        try:
+                            print(
+                                f"[DIAG][REINJECT] single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
+                        except Exception:
+                            pass
+                    for si in sent_infos:
+                        if a <= si["index"] <= b:
+                            to_reinject.append(si["text"])
+
+            _diag_reinj_considered_total += len(sent_infos)
+            try:
+                print(
+                    f"[DIAG] Reinjection considered sentences: {len(sent_infos)}", flush=True)
+                print(
+                    f"[DIAG] Reinjection: will add {len(to_reinject)} sentence(s)", flush=True)
+            except Exception:
+                pass
+            for m in to_reinject:
+                # infer character contextually from last speaker; default Narrator
+                try:
+                    last_char = reconciled[-1]["character"] if reconciled else "Narrator"
+                except Exception:
+                    last_char = "Narrator"
+                txt_lower = (m or "").lower()
+                char_guess = last_char
+                try:
+                    if any(w in txt_lower for w in ["“", '"', " said", "asked", "whispered", "replied", "murmured", "moaned", "commanded"]) and last_char not in ("Narrator", "Ambiguous"):
+                        char_guess = last_char
+                    elif (m or "").strip().startswith(("“", '"')):
+                        # quote but no clear attribution
+                        char_guess = "Ambiguous" if last_char in (
+                            "Narrator", "Ambiguous") else last_char
+                    else:
+                        char_guess = "Narrator"
+                except Exception:
+                    char_guess = last_char or "Narrator"
+                reconciled.append({
+                    "character": char_guess,
+                    "emotions": ["neutral", "calm"],
+                    "text": m,
+                    "id": f"reinjected-{abs(hash(m))}",
+                    "_src": "reinj",
+                })
+                try:
+                    reason = "prev" if char_guess not in ("Narrator", "Ambiguous") else (
+                        "quote-no-speaker" if (m or "").strip().startswith(("“", '"')) else "none")
+                    print(
+                        f"[REINJ_FIX] text='{(m or '')[:80]}' char_guess={char_guess} reason={reason}",
+                        flush=True,
+                    )
                 except Exception:
                     pass
-                    if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
-                        if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
-                            try:
-                                print(
-                                    f"[DIAG][REINJECT] single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
-                            except Exception:
-                                pass
-                        for si in sent_infos:
-                            if a <= si["index"] <= b:
-                                to_reinject.append(si["text"])
-
-                _diag_reinj_considered_total += len(sent_infos)
-                try:
-                    print(
-                        f"[DIAG] Reinjection considered sentences: {len(sent_infos)}", flush=True)
-                    print(
-                        f"[DIAG] Reinjection: will add {len(to_reinject)} sentence(s)", flush=True)
-                except Exception:
-                    pass
-                for m in to_reinject:
-                    # infer character contextually from last speaker; default Narrator
-                    try:
-                        last_char = reconciled[-1]["character"] if reconciled else "Narrator"
-                    except Exception:
-                        last_char = "Narrator"
-                    txt_lower = (m or "").lower()
-                    char_guess = last_char
-                    try:
-                        if any(w in txt_lower for w in ["“", '"', " said", "asked", "whispered", "replied", "murmured", "moaned", "commanded"]) and last_char not in ("Narrator", "Ambiguous"):
-                            char_guess = last_char
-                        elif (m or "").strip().startswith(("“", '"')):
-                            # quote but no clear attribution
-                            char_guess = "Ambiguous" if last_char in (
-                                "Narrator", "Ambiguous") else last_char
-                        else:
-                            char_guess = "Narrator"
-                    except Exception:
-                        char_guess = last_char or "Narrator"
-                    reconciled.append({
-                        "character": char_guess,
-                        "emotions": ["neutral", "calm"],
-                        "text": m,
-                        "id": f"reinjected-{abs(hash(m))}",
-                        "_src": "reinj",
-                    })
-                    try:
-                        reason = "prev" if char_guess not in ("Narrator", "Ambiguous") else (
-                            "quote-no-speaker" if (m or "").strip().startswith(("“", '"')) else "none")
-                        print(
-                            f"[REINJ_FIX] text='{(m or '')[:80]}' char_guess={char_guess} reason={reason}",
-                            flush=True,
-                        )
-                    except Exception:
-                        pass
-                _diag_reinj_added_total += len(to_reinject)
-                if to_reinject:
-                    warnings.append(
-                        f"Re-injected {len(to_reinject)} missing sentence(s) as Narrator.")
+            _diag_reinj_added_total += len(to_reinject)
+            if to_reinject:
+                warnings.append(
+                    f"Re-injected {len(to_reinject)} missing sentence(s) as Narrator.")
         except Exception as _se:
             # Never fail the main flow due to safeguard
             try:
@@ -1134,6 +1302,24 @@ class OpenAIParser:
                     txt = (d.get('text', '') or '')[:180]
                     src = d.get('_src', '?')
                     print(f"{k:03d}. [{src}] {ch_name}: {txt}", flush=True)
+                # Tail growth check
+                try:
+                    narr_reinj = sum(1 for d in tail if str(d.get('character', '')).strip(
+                    ) == 'Narrator' and d.get('_src') in {'reinj', 'fb'})
+                    if narr_reinj >= 10 and len(tail) >= 10:
+                        print(
+                            f"[TAIL_CHECK] suspicious_tail narrator_reinj={narr_reinj} last20_total={len(tail)}", flush=True)
+                    # dup in tail
+                    def norm(s): return (s or '').strip().lower()
+                    earlier = {norm(x.get('text', ''))
+                               for x in reconciled[:-20]}
+                    dup_tail = sum(1 for d in tail if norm(
+                        d.get('text', '')) in earlier)
+                    if dup_tail:
+                        print(
+                            f"[TAIL_CHECK] dup_in_tail count={dup_tail}", flush=True)
+                except Exception:
+                    pass
                 print("===== [EOD][TAIL] END =====\n", flush=True)
             except Exception:
                 print("[EOD] <failed to print reconciled tail>", flush=True)
@@ -1409,7 +1595,13 @@ class OpenAIParser:
                     except Exception:
                         pass
                 if problem_segments:
-                    for _seg_i, seg in enumerate(problem_segments, start=1):
+                    try:
+                        _ordered_segments3 = sorted(
+                            problem_segments, key=lambda s: int(s.get("start_idx", 0)))
+                    except Exception:
+                        _ordered_segments3 = list(problem_segments)
+                    _running_delta3 = 0
+                    for _seg_i, seg in enumerate(_ordered_segments3, start=1):
                         try:
                             if idx == total - 1:
                                 print(
@@ -1477,6 +1669,11 @@ class OpenAIParser:
                                     pass
                             fb_lines = self._parse_jsonl(
                                 self._preclean_jsonl(fb_raw))
+                            try:
+                                fb_lines = [_sanitize_character(
+                                    x, sorted(list(state.known_characters))) for x in fb_lines]
+                            except Exception:
+                                pass
                             print(
                                 f"[DEBUG] Fallback parsed {len(fb_lines)} line(s)", flush=True)
                             fb_valid, warnings = self._validate_and_fix(
@@ -1517,8 +1714,29 @@ class OpenAIParser:
                                             f"[DIAG][UNKNOWN_SPEAKER] '{ch_name}' text='{_txt}' (allowed_size={len(allowed)})", flush=True)
                             except Exception:
                                 pass
-                            replace_or_insert_lines(fixed, seg.get("start_idx", 0), fb_valid, seg.get(
-                                "end_idx", seg.get("start_idx", 0)))
+                            try:
+                                logger = None
+                            except Exception:
+                                logger = None
+                            try:
+                                _base_pos = int(seg.get("start_idx", 0))
+                            except Exception:
+                                _base_pos = 0
+                            _approx_pos = _base_pos + _running_delta3
+                            try:
+                                print(
+                                    f"[REINJ_DELTA] base_pos={_base_pos} approx_pos={_approx_pos} delta={_running_delta3}", flush=True)
+                            except Exception:
+                                pass
+                            if fb_valid:
+                                replace_or_insert_lines(
+                                    dialogues=fixed,
+                                    new_lines=fb_valid,
+                                    start_index=_approx_pos,
+                                    end_index=_approx_pos,
+                                    logger=logger,
+                                )
+                                _running_delta3 += len(fb_valid)
                             if is_last_chunk:
                                 print(
                                     f"[EOD][FB_SUMMARY] After filtering: kept={len(fb_valid)} lines for last chunk.", flush=True)
@@ -1554,12 +1772,17 @@ class OpenAIParser:
                                     self._preclean_jsonl(fb_raw))
                                 fb_valid, warnings = self._validate_and_fix(
                                     fb_lines, warnings, state)
+                                try:
+                                    logger = None
+                                except Exception:
+                                    logger = None
                                 replace_or_insert_lines(
-                                    fixed,
-                                    seg.get("start_idx", 0),
-                                    fb_valid,
-                                    seg.get("end_idx", seg.get(
-                                        "start_idx", 0)),
+                                    dialogues=fixed,
+                                    new_lines=fb_valid,
+                                    start_index=seg.get("start_idx", 0),
+                                    end_index=seg.get(
+                                        "end_idx", seg.get("start_idx", 0)),
+                                    logger=logger,
                                 )
                             except Exception as _fe:
                                 print(
@@ -1584,80 +1807,82 @@ class OpenAIParser:
                         filtered = self._simple_reinject_missing_as_narrator(
                             ch.text, filtered)
                     else:
-                        from .fallback_utils import _split_sentences as _split_sents, _normalize_text as _norm
+                        from .fallback_utils import _split_sentences as _split_sents
                         sent_infos = _split_sents(ch.text)
-                        present = {_norm(d.get("text", "")) for d in filtered}
+                        present = {_norm_for_compare(
+                            d.get("text", "")) for d in filtered}
                         reinjected = 0
                         print(
                             f"[DIAG] Streaming reinjection: considered={len(sent_infos)}", flush=True)
-                        import re as _re
 
-                        def _extract_quotes(s: str) -> list[str]:
-                            qs: list[str] = []
-                            for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
-                                for m in _re.findall(pat, s or ""):
-                                    if m and m.strip():
-                                        qs.append(_norm(m))
-                            return qs
-                        missing_idx: list[int] = []
-                        for si in sent_infos:
-                            s_norm = si.get("norm", "")
-                            if not s_norm:
+                    import re as _re
+
+                    def _extract_quotes(s: str) -> list[str]:
+                        qs: list[str] = []
+                        for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
+                            for m in _re.findall(pat, s or ""):
+                                if m and m.strip():
+                                    qs.append(_norm_for_compare(m))
+                        return qs
+                    missing_idx: list[int] = []
+                    for si in sent_infos:
+                        s_norm = si.get("norm", "")
+                        if not s_norm:
+                            continue
+                        covered = (s_norm in present) or any(
+                            (s_norm in p or p in s_norm) for p in present)
+                        if not covered and self.REINJECT_STRICT:
+                            qs = _extract_quotes(si.get("text", ""))
+                            if qs and any(q in present for q in qs):
+                                covered = True
+                        if not covered:
+                            missing_idx.append(si["index"])
+                    # group and apply min gap >= 2 when strict
+                    groups: list[tuple[int, int]] = []
+                    if missing_idx:
+                        missing_idx = sorted(set(missing_idx))
+                        start = prev = missing_idx[0]
+                        for i in missing_idx[1:]:
+                            if i == prev + 1:
+                                prev = i
                                 continue
-                            covered = (s_norm in present) or any(
-                                (s_norm in p or p in s_norm) for p in present)
-                            if not covered and self.REINJECT_STRICT:
-                                qs = _extract_quotes(si.get("text", ""))
-                                if qs and any(q in present for q in qs):
-                                    covered = True
-                            if not covered:
-                                missing_idx.append(si["index"])
-                        # group and apply min gap >= 2 when strict
-                        groups: list[tuple[int, int]] = []
-                        if missing_idx:
-                            missing_idx = sorted(set(missing_idx))
-                            start = prev = missing_idx[0]
-                            for i in missing_idx[1:]:
-                                if i == prev + 1:
-                                    prev = i
-                                    continue
-                                groups.append((start, prev))
-                                start = prev = i
                             groups.append((start, prev))
-                        for a, b in groups:
-                            length = b - a + 1
-                            # Allow single short narrative reinjection if under 12 tokens
-                            sent_texts = [si["text"]
-                                          for si in sent_infos if a <= si["index"] <= b]
-                            avg_tokens = sum(len(t.split())
-                                             for t in sent_texts) / max(1, len(sent_texts))
-                            if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
-                                if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
+                            start = prev = i
+                        groups.append((start, prev))
+                    for a, b in groups:
+                        length = b - a + 1
+                        # Allow single short narrative reinjection if under 12 tokens
+                        sent_texts = [si["text"]
+                                      for si in sent_infos if a <= si["index"] <= b]
+                        avg_tokens = sum(len(t.split())
+                                         for t in sent_texts) / max(1, len(sent_texts))
+                        if (not self.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
+                            if self.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
+                                try:
+                                    print(
+                                        f"[DIAG][REINJECT] (streaming) single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
+                                except Exception:
+                                    pass
+                            for si in sent_infos:
+                                if a <= si["index"] <= b:
+                                    filtered.append({
+                                        "character": "Narrator",
+                                        "emotions": ["neutral", "calm"],
+                                        "text": si["text"],
+                                        "id": f"reinjected-{abs(hash(si['text']))}",
+                                        "_src": "reinj",
+                                    })
+                                    reinjected += 1
                                     try:
+                                        _samples = [d.get("text", "")
+                                                    for d in filtered[:2]]
                                         print(
-                                            f"[DIAG][REINJECT] (streaming) single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)
+                                            f"[DIAG] Streaming reinjected (strict): '{(si['text'] or '')[:120]}' | samples={_samples}", flush=True)
                                     except Exception:
                                         pass
-                                for si in sent_infos:
-                                    if a <= si["index"] <= b:
-                                        filtered.append({
-                                            "character": "Narrator",
-                                            "emotions": ["neutral", "calm"],
-                                            "text": si["text"],
-                                            "id": f"reinjected-{abs(hash(si['text']))}",
-                                            "_src": "reinj",
-                                        })
-                                        reinjected += 1
-                                        try:
-                                            _samples = [d.get("text", "")
-                                                        for d in filtered[:2]]
-                                            print(
-                                                f"[DIAG] Streaming reinjected (strict): '{(si['text'] or '')[:120]}' | samples={_samples}", flush=True)
-                                        except Exception:
-                                            pass
-                        if reinjected:
-                            warnings.append(
-                                f"Streaming: re-injected {reinjected} missing sentence(s) as Narrator.")
+                    if reinjected:
+                        warnings.append(
+                            f"Streaming: re-injected {reinjected} missing sentence(s) as Narrator.")
                 except Exception:
                     pass
                 # Final purge of REJECTED lines before yielding (streaming)

@@ -64,6 +64,16 @@ def build_system_prompt(
         lines.append(
             "Do not include narration lines; only output spoken dialogue.")
 
+    try:
+        overlap_info = "unknown"
+        # We can't see overlap_sentences directly here; log coverage clause presence
+        coverage_present = any(
+            'Do NOT skip' in s or 'Do NOT skip or drop' in s for s in lines)
+        print(
+            f"[PROMPT_CFG] chunk_overlap={overlap_info} coverage_clause_present={coverage_present}", flush=True)
+    except Exception:
+        pass
+
     # Few-shot pattern examples
     lines.extend([
         '{"character": "Brad", "emotions": ["angry", "tense"], "text": "Get up!"}',

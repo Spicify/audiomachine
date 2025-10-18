@@ -4,6 +4,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from typing import List, Tuple
+from utils.text_normalizer import normalize_text as _norm_for_compare
 
 try:
     import tiktoken
@@ -143,21 +144,22 @@ def deduplicate_lines(lines: List[dict]) -> List[dict]:
     Secondary: cross-character normalized text match → prefer non-Narrator.
     """
     def _norm_text(s: str) -> str:
-        s = (s or "").strip().lower()
-        # strip quotes and collapse whitespace
-        import re as _re
-        s = s.strip('"\'“”‘’')
-        s = _re.sub(r"\s+", " ", s)
-        return s
+        # Delegate to shared normalizer for cross-module consistency
+        return _norm_for_compare(s or "")
 
     seen = set()
     result: List[dict] = []
     norm_to_index: dict[str, int] = {}
 
-    for it in lines:
+    for idx, it in enumerate(lines):
         key = _hash_text(
             f"{(it.get('character') or '').strip().lower()}|{(it.get('text') or '').strip()}")
         if key in seen:
+            try:
+                print(
+                    f"[DEDUP_DECISION] action=drop sim=1.000 reason=exact idx={idx} txt='{(it.get('text','') or '')[:60]}'", flush=True)
+            except Exception:
+                pass
             continue
         txt_norm = _norm_text(it.get("text", ""))
         if txt_norm:
@@ -165,6 +167,30 @@ def deduplicate_lines(lines: List[dict]) -> List[dict]:
                 # prefer non-Narrator version
                 existing_idx = norm_to_index[txt_norm]
                 existing = result[existing_idx]
+                # Short fresh insertion guard for FB/REINJ content
+                try:
+                    a_txt = (existing or {}).get("text", "")
+                    b_txt = (it or {}).get("text", "")
+                    a_n = _norm_for_compare(a_txt)
+                    b_n = _norm_for_compare(b_txt)
+                    short_guard = (min(len(a_n), len(b_n)) <= 25)
+                    fresh_src = (((it or {}).get("_src") in {"fb", "reinj"}) or (
+                        (existing or {}).get("_src") in {"fb", "reinj"}))
+                    if short_guard and fresh_src:
+                        # Only drop if truly identical after normalization
+                        if a_n != b_n:
+                            try:
+                                print(
+                                    f"[DEDUP_DECISION] skip_drop short_guard src={(it or {}).get('_src')} text='{b_n[:60]}'", flush=True)
+                            except Exception:
+                                pass
+                            seen.add(key)
+                            result.append(it)
+                            if txt_norm and txt_norm not in norm_to_index:
+                                norm_to_index[txt_norm] = len(result) - 1
+                            continue
+                except Exception:
+                    pass
                 cur_is_narr = str(it.get("character", "")
                                   ).strip() == "Narrator"
                 exist_is_narr = str(existing.get(
@@ -183,6 +209,11 @@ def deduplicate_lines(lines: List[dict]) -> List[dict]:
                     continue
                 # else, drop current narrator duplicate
                 if cur_is_narr:
+                    try:
+                        print(
+                            f"[DEDUP_DECISION] action=drop sim=1.000 reason=normalized-narrator idx={idx} txt='{(it.get('text','') or '')[:60]}'", flush=True)
+                    except Exception:
+                        pass
                     continue
                 # [DIAG] conflict: same normalized text with two non-narrator speakers
                 try:
@@ -237,24 +268,51 @@ def deduplicate_lines_exact(lines: list) -> list:
     from difflib import SequenceMatcher
 
     def _norm(s: str) -> str:
-        return re.sub(r"\s+", " ", s or "").strip().lower()
+        return _norm_for_compare(s or "")
 
     seen = []
     out = []
-    for obj in lines:
+    for idx, obj in enumerate(lines):
         ch = (obj or {}).get("character", "")
         tx = (obj or {}).get("text", "")
         key = (ch.strip().lower(), _norm(tx))
         # exact seen?
         if key in seen:
+            try:
+                print(
+                    f"[DEDUP_DECISION] action=drop sim=1.000 reason=exact idx={idx} txt='{(tx or '')[:60]}'", flush=True)
+            except Exception:
+                pass
             continue
         # light near-dup guard: if any seen text is ~identical, drop
         is_near_dup = False
         for sch, stx in seen:
-            if sch == key[0] and SequenceMatcher(None, key[1], stx).ratio() >= 0.98:
+            if sch != key[0]:
+                continue
+            # Short fresh insertion guard for short FB/REINJ lines before dropping
+            try:
+                a_n = stx
+                b_n = key[1]
+                short_guard = (min(len(a_n), len(b_n)) <= 25)
+                fresh_src = ((obj or {}).get("_src") in {"fb", "reinj"})
+                if short_guard and fresh_src and (a_n != b_n):
+                    try:
+                        print(
+                            f"[DEDUP_DECISION] skip_drop short_guard src={(obj or {}).get('_src')} text='{b_n[:60]}'", flush=True)
+                    except Exception:
+                        pass
+                    continue
+            except Exception:
+                pass
+            if SequenceMatcher(None, key[1], stx).ratio() >= 0.98:
                 is_near_dup = True
                 break
         if is_near_dup:
+            try:
+                print(
+                    f"[DEDUP_DECISION] action=drop sim=0.980 reason=near-exact idx={idx} txt='{(tx or '')[:60]}'", flush=True)
+            except Exception:
+                pass
             continue
         seen.append(key)
         out.append(obj)
