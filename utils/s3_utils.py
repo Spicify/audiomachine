@@ -220,55 +220,36 @@ def s3_object_exists(key: str, bucket: Optional[str] = None) -> bool:
 def s3_list_projects_page(prefix: str = "projects/", max_keys: int = 10,
                           continuation_token: Optional[str] = None, bucket: Optional[str] = None) -> Dict[str, Any]:
     """
-    List exactly `max_keys` project JSON files in descending LastModified order (most recent first),
-    supporting continuation for next-page retrieval.
+    Return project JSON keys globally sorted by LastModified (newest first).
+    Implements stable pagination: page N always shows next 10 newest items.
     """
     s3 = get_s3_client()
     bucket = bucket or get_bucket_defaults()
-    kwargs = {"Bucket": bucket, "Prefix": prefix,
-              "MaxKeys": max(1, min(1000, max_keys))}
-    if continuation_token:
-        kwargs["ContinuationToken"] = continuation_token
 
-    resp = s3.list_objects_v2(**kwargs)
-    contents = resp.get("Contents", [])
-    # Sort descending by LastModified for consistent reverse ordering
-    contents = sorted(contents, key=lambda x: x["LastModified"], reverse=True)
-    keys = [item["Key"] for item in contents if item["Key"].endswith(".json")]
-
-    # Ensure we always attempt to return exactly max_keys if possible
-    while len(keys) < max_keys and resp.get("IsTruncated"):
-        resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix,
-                                  ContinuationToken=resp["NextContinuationToken"],
-                                  MaxKeys=max(1, min(1000, max_keys - len(keys))))
-        next_contents = sorted(resp.get("Contents", []),
-                               key=lambda x: x["LastModified"], reverse=True)
-        next_keys = [item["Key"]
-                     for item in next_contents if item["Key"].endswith(".json")]
-        keys.extend(next_keys)
-        if not resp.get("IsTruncated") or len(keys) >= max_keys:
+    # Fetch *all* JSON objects once
+    all_objects: List[Dict[str, Any]] = []
+    token = None
+    while True:
+        kwargs = {"Bucket": bucket, "Prefix": prefix}
+        if token:
+            kwargs["ContinuationToken"] = token
+        resp = s3.list_objects_v2(**kwargs)
+        all_objects.extend(resp.get("Contents", []))
+        if not resp.get("IsTruncated"):
             break
+        token = resp.get("NextContinuationToken")
 
-    # Final sort to guarantee strict reverse chronological order
-    # This ensures consistent ordering even when combining multiple S3 responses
-    keys = keys[:max_keys]
+    # Keep only .json files and sort globally
+    json_objs = [obj for obj in all_objects if obj["Key"].endswith(".json")]
+    json_objs.sort(key=lambda o: o["LastModified"], reverse=True)
 
-    # Re-sort the final keys by their LastModified timestamps to guarantee order
-    # We need to fetch metadata for each key to sort properly
-    if len(keys) > 1:
-        key_metadata = []
-        for key in keys:
-            try:
-                head_resp = s3.head_object(Bucket=bucket, Key=key)
-                key_metadata.append((key, head_resp["LastModified"]))
-            except Exception:
-                # If head_object fails, use a default timestamp
-                key_metadata.append((key, datetime.datetime.min))
+    # Convert continuation_token into a numeric page index
+    page_index = int(continuation_token or 1)
+    start = (page_index - 1) * max_keys
+    end = start + max_keys
+    page_slice = json_objs[start:end]
 
-        # Sort by LastModified descending (newest first)
-        key_metadata.sort(key=lambda x: x[1], reverse=True)
-        keys = [item[0] for item in key_metadata]
+    keys = [obj["Key"] for obj in page_slice]
+    next_token = str(page_index + 1) if end < len(json_objs) else None
 
-    next_token = resp.get("NextContinuationToken") if resp.get(
-        "IsTruncated") else None
     return {"keys": keys, "next_token": next_token}

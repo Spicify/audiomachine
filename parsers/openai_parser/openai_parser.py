@@ -151,7 +151,7 @@ def _fuzzy_sim(a: str, b: str) -> float:
 def _extract_quotes(text: str) -> str:
     """Extract spoken parts inside quotes for fair comparison against Friendli text."""
     try:
-        quotes = _re_quotes.findall(r'“([^”]+)”|"([^"]+)"', text or "")
+        quotes = _re_quotes.findall(r'“([^"]+)"|"([^"]+)"', text or "")
         if quotes:
             return " ".join([(q[0] or q[1]) for q in quotes])
     except Exception:
@@ -320,7 +320,7 @@ class OpenAIParser:
 
             # Quotes rule: skip enforcement for Narrator; if the original required quotes, enforce here.
             if not is_narr:
-                has_quote = ('"' in txt) or ("“" in txt and "”" in txt)
+                has_quote = ('"' in txt) or (""" in txt and """ in txt)
                 # If quote enforcement is desired, uncomment:
                 # if not has_quote:
                 #     base_rejected += 1
@@ -421,9 +421,9 @@ class OpenAIParser:
             boundary = re.compile(
                 r'(?<=[.!?])\s+'
                 r'|(?<=,")\s+'
-                r'|(?<=,”)\s+'
-                r'|(?<=")\s+(?=(?:[A-Z]|he|she|they))'
-                r'|(?<=\.)\s+(?=")'
+                r'|(?<=,)\s+'
+                r'|(?<=\")\s+(?=(?:[A-Z]|he|she|they))'
+                r'|(?<=\.)\s+(?=\")'
             )
             parts = [p.strip() for p in boundary.split(t) if p and p.strip()]
             return parts
@@ -467,9 +467,9 @@ class OpenAIParser:
             """
             Robust sentence splitter for reinjection:
             - Treats standard sentence endings (. ! ?) as boundaries.
-            - Also treats comma+closing-quote (,” or ,") as a boundary commonly found in dialogue:
-              e.g., “You found it,” he said.
-            - Handles curly quotes (“ ”), ellipsis (…) and em dashes (—).
+            - Also treats comma+closing-quote (, or ,) as a boundary commonly found in dialogue:
+              e.g., "You found it," he said.
+            - Handles curly quotes (), ellipsis () and em dashes ().
             - Avoids over-splitting on simple commas.
             """
             import re
@@ -489,9 +489,9 @@ class OpenAIParser:
             # Pattern explanation:
             #  - (?<=[.!?])\s+        → standard sentence enders
             #  - (?<=,")\s+           → comma + closing quote boundary
-            #  - (?<=,”)\s+           → comma + curly quote boundary (already normalized above, but keep for safety)
-            #  - (?<=")\s+(?=(?:[A-Z]|he|she|they)) → closing quote followed by a likely attribution/next clause
-            #  - (?<=\.)\s+(?=")      → period followed by opening quote (new sentence starting with a quote)
+            #  - (?<=,)\s+           → comma + curly quote boundary (already normalized above, but keep for safety)
+            #  - (?<=\")\s+(?=(?:[A-Z]|he|she|they)) → closing quote followed by a likely attribution/next clause
+            #  - (?<=\.)\s+(?=\")      → period followed by opening quote (new sentence starting with a quote)
             #
             # Notes:
             #  * We deliberately do NOT split on plain commas.
@@ -500,9 +500,9 @@ class OpenAIParser:
             boundary = re.compile(
                 r'(?<=[.!?])\s+'
                 r'|(?<=,")\s+'
-                r'|(?<=,”)\s+'
-                r'|(?<=")\s+(?=(?:[A-Z]|he|she|they))'
-                r'|(?<=\.)\s+(?=")'
+                r'|(?<=,)\s+'
+                r'|(?<=\")\s+(?=(?:[A-Z]|he|she|they))'
+                r'|(?<=\.)\s+(?=\")'
             )
 
             # Split and trim; keep only non-empty sentences
@@ -543,7 +543,7 @@ class OpenAIParser:
             if not _covered(sn):
                 reinjected.append({
                     "character": "Narrator",
-                    "emotions": ["neutral", "neutral"],
+                    "emotions": [],
                     "text": s,
                     "_src": "reinj"
                 })
@@ -1173,7 +1173,14 @@ class OpenAIParser:
             def _extract_quotes(s: str) -> List[str]:
                 qs: List[str] = []
                 try:
-                    for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
+                    # Use consistent raw string literals and properly escaped quotes
+                    patterns = [
+                        r'"([^"]+)"',          # standard double quotes
+                        r'“([^”]+)”',          # curly double quotes
+                        r'‘([^’]+)’',          # curly single quotes
+                        r"'([^']+)'"           # straight single quotes
+                    ]
+                    for pat in patterns:
                         for m in _re.findall(pat, s):
                             if m and m.strip():
                                 qs.append(_norm_for_compare(m))
@@ -1252,9 +1259,9 @@ class OpenAIParser:
                 txt_lower = (m or "").lower()
                 char_guess = last_char
                 try:
-                    if any(w in txt_lower for w in ["“", '"', " said", "asked", "whispered", "replied", "murmured", "moaned", "commanded"]) and last_char not in ("Narrator", "Ambiguous"):
+                    if any(w in txt_lower for w in ["\"", '"', " said", "asked", "whispered", "replied", "murmured", "moaned", "commanded"]) and last_char not in ("Narrator", "Ambiguous"):
                         char_guess = last_char
-                    elif (m or "").strip().startswith(("“", '"')):
+                    elif (m or "").strip().startswith(("\"", '"')):
                         # quote but no clear attribution
                         char_guess = "Ambiguous" if last_char in (
                             "Narrator", "Ambiguous") else last_char
@@ -1264,14 +1271,14 @@ class OpenAIParser:
                     char_guess = last_char or "Narrator"
                 reconciled.append({
                     "character": char_guess,
-                    "emotions": ["neutral", "calm"],
+                    "emotions": [],
                     "text": m,
                     "id": f"reinjected-{abs(hash(m))}",
                     "_src": "reinj",
                 })
                 try:
                     reason = "prev" if char_guess not in ("Narrator", "Ambiguous") else (
-                        "quote-no-speaker" if (m or "").strip().startswith(("“", '"')) else "none")
+                        "quote-no-speaker" if (m or "").strip().startswith(("\"", '"')) else "none")
                     print(
                         f"[REINJ_FIX] text='{(m or '')[:80]}' char_guess={char_guess} reason={reason}",
                         flush=True,
@@ -1817,13 +1824,24 @@ class OpenAIParser:
 
                     import re as _re
 
-                    def _extract_quotes(s: str) -> list[str]:
-                        qs: list[str] = []
-                        for pat in [r"\"([^\"]+)\"", r"“([^”]+)”,?", r"‘([^’]+)’", r"'([^']+)'"]:
-                            for m in _re.findall(pat, s or ""):
-                                if m and m.strip():
-                                    qs.append(_norm_for_compare(m))
+                    def _extract_quotes(s: str) -> List[str]:
+                        qs: List[str] = []
+                        try:
+                            # Use consistent raw string literals and properly escaped quotes
+                            patterns = [
+                                r'"([^"]+)"',          # standard double quotes
+                                r'“([^”]+)”',          # curly double quotes
+                                r'‘([^’]+)’',          # curly single quotes
+                                r"'([^']+)'"           # straight single quotes
+                            ]
+                            for pat in patterns:
+                                for m in _re.findall(pat, s):
+                                    if m and m.strip():
+                                        qs.append(_norm_for_compare(m))
+                        except Exception:
+                            pass
                         return qs
+
                     missing_idx: list[int] = []
                     for si in sent_infos:
                         s_norm = si.get("norm", "")
@@ -1867,7 +1885,7 @@ class OpenAIParser:
                                 if a <= si["index"] <= b:
                                     filtered.append({
                                         "character": "Narrator",
-                                        "emotions": ["neutral", "calm"],
+                                        "emotions": [],
                                         "text": si["text"],
                                         "id": f"reinjected-{abs(hash(si['text']))}",
                                         "_src": "reinj",

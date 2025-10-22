@@ -117,31 +117,35 @@ def ensure_two_emotions(
 
     # Derive at least one from text if empty
     if not norm:
-        d = derive_emotion_from_text(text, kb, allowed) or "calm"
-        norm = [d]
+        d = derive_emotion_from_text(text, kb, allowed)
+        if d:
+            norm = [d]
 
     # If only one, derive a complementary one
     if len(norm) == 1:
-        d2 = derive_emotion_from_text(text, kb, allowed) or "calm"
-        # diversify against recent
-        d2 = diversify_emotion(d2, memory.last_n(character, 4), allowed)
-        if d2 == norm[0]:
-            # choose any other
-            for e in allowed:
-                if e != norm[0]:
-                    d2 = e
-                    break
-        norm.append(d2)
+        d2 = derive_emotion_from_text(text, kb, allowed)
+        if d2:
+            # diversify against recent
+            d2 = diversify_emotion(d2, memory.last_n(character, 4), allowed)
+            if d2 != norm[0]:
+                norm.append(d2)
 
     # If more than 2, keep first two
     if len(norm) > 2:
         norm = norm[:2]
 
-    # Guarantee length 2
-    while len(norm) < 2:
-        add = "calm" if "calm" not in norm else next(
-            iter(allowed - set(norm)), "calm")
-        norm.append(add)
+    # Do not auto-fill to reach length 2; leave as-is (<2 allowed here)
+    # Optional debug log
+    try:
+        from .openai_parser import DEBUG_PARSER_DIAG as _DBG
+    except Exception:
+        _DBG = False
+    if _DBG and len(norm) < 2:
+        try:
+            print(
+                f"[EMOTION_FILL] skipped default text='{text[:60]}' emotions={norm}", flush=True)
+        except Exception:
+            pass
 
     try:
         print(f"[EMO] text='{text[:60]}' emotions={norm}", flush=True)

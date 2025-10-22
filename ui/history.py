@@ -110,7 +110,7 @@ def create_history_tab():
             st.info("No history yet. Generate audio to see entries here.")
             return
 
-        # Build entries list
+        # Build entries list (preserve S3 ordering which is newest-first)
         entries: List[Dict[str, Any]] = []
         for key in project_keys:
             data = s3_read_json(key) or {}
@@ -134,7 +134,28 @@ def create_history_tab():
             entries.append({"project_id": project_id, "status": status,
                            "last_updated": last_updated, "dt": dt, "url": url})
 
-        entries.sort(key=lambda e: e["dt"], reverse=True)
+        # --- Sort entries by JSON's last_updated (true generation timestamp) ---
+        def _safe_parse_dt(ts: str) -> datetime:
+            try:
+                return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                return datetime.min
+
+        entries.sort(key=lambda e: _safe_parse_dt(
+            e.get("last_updated", "")), reverse=True)
+
+        # Optional debug log
+        try:
+            from parsers.openai_parser.openai_parser import DEBUG_PARSER_DIAG as _DBG
+        except Exception:
+            _DBG = False
+        try:
+            import os as _os
+            if _os.getenv("DEBUG_MODE") == "1" or _DBG:
+                print(
+                    f"[HISTORY_SORT] Ordered {len(entries)} items by JSON last_updated", flush=True)
+        except Exception:
+            pass
 
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -176,7 +197,7 @@ def create_history_tab():
             <div class=\"history-card\">\
                 <div class=\"history-title\">{e["project_id"]} {chip}</div>\
                 <div class=\"history-meta\">Updated: {pretty_time}</div>\
-                <div style=\\"margin-top:8px;\\">{download_html}</div>\
+                <div style=\"margin-top:8px;\">{download_html}</div>\
             </div>
             """
             st.markdown(card_html, unsafe_allow_html=True)

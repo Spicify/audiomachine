@@ -25,12 +25,12 @@ def _build_fallback_system_prompt(known_characters: list[str] | None = None) -> 
         "Quotes: The text field must contain ONLY the spoken words inside quotes (drop attributions like 'he growled').",
         "When quotes include attribution verbs (e.g., said, asked, whispered, commanded, moaned, murmured, replied), exclude those verbs from the 'text' (keep only the words inside quotes).",
         "Speaker inference: When a quoted dialogue appears after a character’s name or pronoun (e.g., Mark said, '…' or he whispered, '…'), infer that character as the speaker of the quoted text.",
-        "Emotions: Exactly TWO per line; if none, use ['neutral','calm'].",
+        "Emotions: Exactly TWO per line.",
         f"Known characters: [{chars_str}]",
         "Examples:",
-        '{"character":"Narrator","emotions":["neutral","calm"],"text":"The rain poured outside."}',
+        '{"character":"Narrator","emotions":["soft","sad"],"text":"The rain poured outside."}',
         '{"character":"Bella","emotions":["confused","tense"],"text":"I can’t believe he said that."}',
-        '{"character":"Ambiguous","emotions":["neutral","calm"],"candidates":["Aria","Luca"],"text":"You two need to keep quiet."}',
+        '{"character":"Ambiguous","emotions":["curious","soft"],"candidates":["Aria","Luca"],"text":"You two need to keep quiet."}',
         '{"character":"Luca","emotions":["angry","tense"],"text":"Get up!"}',
         # New concise example for attribution verbs inside quotes
         'Input: "Keep your eyes on me," she commanded. → Output: {"character":"Maya","emotions":["commanding","dominant"],"text":"Keep your eyes on me."}',
@@ -106,7 +106,7 @@ def _normalize_text(s: str) -> str:
     }))
     s = s.strip(_QUOTE_CHARS)
     s = s.replace("—", " ").replace("–", "-")
-    s = re.sub(r"\s+", " ", s)
+    s = re.sub(r"\s+", " ")
     return s.strip().lower()
 
 
@@ -457,7 +457,7 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
             return ""
         s = s.replace("\u201C", '"').replace("\u201D", '"')
         s = s.replace("\u2018", "'").replace("\u2019", "'")
-        s = re.sub(r"\s+", " ", s).strip().lower()
+        s = re.sub(r"\s+", " ").strip().lower()
         return s
 
     def _clamp(i: int, lo: int, hi: int) -> int:

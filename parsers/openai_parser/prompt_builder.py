@@ -46,7 +46,7 @@ def build_system_prompt(
         "",
         "Emotion rules:",
         "- Provide exactly TWO emotions per line.",
-        "- Emotions must be from ALLOWED_EMOTIONS. If none applies, use 'calm'.",
+        "- Emotions must be from ALLOWED_EMOTIONS.",
         "",
         "Formatting rules:",
         "- JSON object per line with keys: character, emotions, text.",
@@ -77,8 +77,8 @@ def build_system_prompt(
     # Few-shot pattern examples
     lines.extend([
         '{"character": "Brad", "emotions": ["angry", "tense"], "text": "Get up!"}',
-        '{"character": "Narrator", "emotions": ["neutral", "calm"], "text": "The sun was setting over the valley."}',
-        '{"character": "Ambiguous", "emotions": ["neutral", "calm"], "candidates": ["Aria Amato", "Luca Moretti"], "text": "You two should keep your voices down."}',
+        '{"character": "Narrator", "emotions": ["soft", "sad"], "text": "The sun was setting over the valley."}',
+        '{"character": "Ambiguous", "emotions": ["curious", "soft"], "candidates": ["Aria Amato", "Luca Moretti"], "text": "You two should keep your voices down."}',
         # Concise example for attribution verbs handling
         'Input: "Keep your eyes on me," she commanded. → Output: {"character":"Maya","emotions":["commanding","dominant"],"text":"Keep your eyes on me."}',
         'Input: Aleksandr murmured, "You look beautiful." → Output: {"character":"Aleksandr","emotions":["gentle","warm"],"text":"You look beautiful."}',
@@ -90,7 +90,7 @@ def build_system_prompt(
         "DO NOT skip or alter it.",
         "Instead, output this exact JSON line:",
         "",
-        '{"character": "REJECTED", "emotions": ["neutral","calm"], "text": "<REJECTED_LINE>"}',
+        '{"character": "REJECTED", "emotions": ["soft","sad"], "text": "<REJECTED_LINE>"}',
         "",
         "where <REJECTED_LINE> is the original sentence you refused to parse.",
         "This tag must be standalone, separate from other lines, and should not affect the rest of the output.",
