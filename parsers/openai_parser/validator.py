@@ -1,71 +1,72 @@
 from __future__ import annotations
-
 from typing import Any, Dict, List, Tuple
-
 from pydantic import ValidationError
 
 from .core_types import DialogueLine, ParserState
-from .emotion_utils import ensure_two_emotions
+from .emotion_utils import ensure_two_emotions, canonicalize_emotion
+from utils.mode import get_emotions_mode
 
 
-def validate_and_fix(items: List[Dict[str, Any]], warnings: List[str], state: ParserState, *, kb=None, allowed_emotions=None, memory=None) -> Tuple[List[Dict[str, Any]], List[str]]:
+def validate_and_fix(
+    items: List[Dict[str, Any]],
+    warnings: List[str],
+    state: ParserState,
+    *,
+    kb=None,
+    allowed_emotions=None,
+    memory=None
+) -> Tuple[List[Dict[str, Any]], List[str]]:
     result: List[Dict[str, Any]] = []
     base_valid = 0
     base_rejected = 0
-    for it in items:
-        try:
-            if str(it.get("character", "")).upper() == "REJECTED":
-                print("[DIAG] REJECTED line entering validator:",
-                      (it.get("text", "") or "")[:60], flush=True)
-                result.append(it)
-                base_rejected += 1
-                continue
-        except Exception:
-            pass
-        char = (it.get("character") or "").strip()
+
+    allowed_chars = set(state.known_characters or []) | {
+        "Narrator", "Ambiguous"}
+
+    for it in items or []:
+        if str(it.get("character", "")).upper() == "REJECTED":
+            result.append(it)
+            base_rejected += 1
+            continue
+
+        char = (it.get("character") or "").strip() or "Ambiguous"
         txt = (it.get("text") or "").strip()
         ems = it.get("emotions") or []
-
-        allowed_chars = set(state.known_characters or []) | {
-            "Narrator", "Ambiguous"}
-        is_narr = (char.lower() == "narrator")
-
-        if char not in allowed_chars:
-            char = "Ambiguous"
-            try:
-                it["character"] = "Ambiguous"
-            except Exception:
-                pass
 
         if not txt:
             base_rejected += 1
             continue
 
-        if not isinstance(ems, list) or len(ems) != 2:
-            base_rejected += 1
-            continue
+        if char not in allowed_chars:
+            char = "Ambiguous"
 
-        if not is_narr:
-            has_quote = ('"' in txt) or (""" in txt and """ in txt)
-            # Quote enforcement remains disabled as in original
+        # ALWAYS enforce exactly two emotions
+        filled = ensure_two_emotions(
+            char, ems, txt, kb, allowed_emotions, memory)
 
-        fixed = {"character": char, "text": txt, "emotions": ems}
-        if str(char).lower() == "ambiguous":
-            if it.get("candidates"):
-                cands = [str(c).strip() for c in (
-                    it.get("candidates") or []) if str(c).strip()]
-                if cands:
-                    fixed["candidates"] = cands[:5]
-            fixed["id"] = f"amb-{abs(hash(txt))}"
+        # Extra mapping safety for freeform: keep within SAFE vocab
+        mode = get_emotions_mode()
+        if mode != "strict_list":
+            mapped = []
+            for e in filled[:2]:
+                ce = canonicalize_emotion(e)
+                mapped.append(ce)
+            filled = mapped[:2]
+            # ensure 2 after mapping
+            if len(filled) < 2:
+                for fb in ("calm", "soft", "tense", "warm"):
+                    ce = canonicalize_emotion(fb)
+                    if ce not in filled:
+                        filled.append(ce)
+                    if len(filled) == 2:
+                        break
 
-        try:
-            if (fixed.get("character") in ("Narrator", "Ambiguous")):
-                print(
-                    f"[ATTR] {fixed['character']} text='{fixed['text'][:80]}'",
-                    flush=True,
-                )
-        except Exception:
-            pass
+        fixed = {"character": char, "text": txt, "emotions": filled[:2]}
+        if char == "Ambiguous" and it.get("candidates"):
+            cands = [str(c).strip()
+                     for c in (it.get("candidates") or []) if str(c).strip()]
+            if cands:
+                fixed["candidates"] = cands[:5]
 
         try:
             DialogueLine(**fixed)
@@ -74,18 +75,20 @@ def validate_and_fix(items: List[Dict[str, Any]], warnings: List[str], state: Pa
                 f"Validation dropped line: {fixed} ({ve.errors()[:1]})")
             continue
 
-        if fixed["character"].lower() != "narrator" and fixed["character"].lower() != "ambiguous":
-            state.known_characters.add(fixed["character"])
-            state.last_speaker = fixed["character"]
-            state.last_emotions.setdefault(
-                fixed["character"], []).extend(fixed["emotions"])
+        # update rolling state/memory
+        if char not in ("Narrator", "Ambiguous"):
+            state.known_characters.add(char)
+            state.last_speaker = char
+            state.last_emotions.setdefault(char, []).extend(fixed["emotions"])
             if memory is not None:
                 try:
-                    memory.push(fixed["character"], fixed["emotions"])
+                    memory.push(char, fixed["emotions"])
                 except Exception:
                     pass
 
+        base_valid += 1
         result.append(fixed)
+
     try:
         print(
             f"[VALIDATE] base_valid={base_valid} base_rejected={base_rejected}", flush=True)

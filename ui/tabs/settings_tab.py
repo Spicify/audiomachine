@@ -2,6 +2,7 @@ import streamlit as st
 from utils.voice_settings import DEFAULT_VOICE_SETTINGS, TOOLTIPS, normalize_settings
 from utils.state_manager import load_project_voice_settings, save_project_voice_settings
 from utils.session_logger import log_to_session, log_exception
+from utils.mode import get_emotions_mode
 
 
 def render(project_name: str):
@@ -16,6 +17,29 @@ def render(project_name: str):
         "Tune voice delivery for richer emotion. These settings apply to all new generations for this project. "
         "These settings complement inline audio tags like [sad], [whispering], [laughing]."
     )
+
+    # --- Emotions Mode Toggle (top-right) ---
+    if "PARSER_EMOTIONS_MODE" not in st.session_state:
+        # Per-session default is freeform
+        st.session_state["PARSER_EMOTIONS_MODE"] = "freeform_map"
+
+    # Layout: left spacer, right control
+    _left, _right = st.columns([0.72, 0.28])
+    with _right:
+        _is_freeform = st.toggle(
+            "Emotion Parsing Mode",
+            value=(st.session_state["PARSER_EMOTIONS_MODE"] == "freeform_map"),
+            help=(
+                "Freeform: The model picks simple, TTS-friendly emotions and the app maps them to a small, stable set. "
+                "Strict: The model must choose only from a predefined list (more consistent, less variety)."
+            ),
+        )
+        st.session_state["PARSER_EMOTIONS_MODE"] = "freeform_map" if _is_freeform else "strict_list"
+        st.caption(
+            f"Mode: {'freeform_map' if _is_freeform else 'strict_list'}",
+            help="This only affects new parses. Freeform yields more natural variety; Strict maximizes consistency."
+        )
+    # -----------------------------------------
 
     saved = load_project_voice_settings(project_name or "default")
     eff = normalize_settings(saved)

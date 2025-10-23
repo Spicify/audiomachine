@@ -106,7 +106,8 @@ def _normalize_text(s: str) -> str:
     }))
     s = s.strip(_QUOTE_CHARS)
     s = s.replace("—", " ").replace("–", "-")
-    s = re.sub(r"\s+", " ")
+    # ✅ FIX: pass `s` to re.sub
+    s = re.sub(r"\s+", " ", s)
     return s.strip().lower()
 
 

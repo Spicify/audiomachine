@@ -74,3 +74,5 @@ if platform.system() == "Windows":  # Local Windows → bundled ffmpeg
 else:  # Linux → system ffmpeg
     AudioSegment.converter = shutil.which("ffmpeg") or "ffmpeg"
     AudioSegment.ffprobe = shutil.which("ffprobe") or "ffprobe"
+
+PARSER_EMOTIONS_MODE = os.getenv("PARSER_EMOTIONS_MODE", "freeform_map")

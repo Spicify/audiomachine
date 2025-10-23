@@ -557,6 +557,36 @@ def convert_stream(parser, raw_text: str) -> Iterator[Dict]:
             except Exception:
                 pass
 
+            # === Post-reinjection emotion clamp (streaming) ===
+            try:
+                from .emotion_utils import ensure_two_emotions, canonicalize_emotion
+                from settings import PARSER_EMOTIONS_MODE
+
+                for _ln in filtered:
+                    ems = _ln.get("emotions") or []
+                    filled = ensure_two_emotions(
+                        _ln.get("character", "") or "",
+                        ems,
+                        _ln.get("text", "") or "",
+                        parser.kb,
+                        parser.allowed_emotions,
+                        parser.memory,
+                    )
+                    if PARSER_EMOTIONS_MODE != "strict_list":
+                        filled = [canonicalize_emotion(e) for e in filled][:2]
+                        if len(filled) < 2:
+                            for fb in ("calm", "soft", "tense", "warm"):
+                                ce = canonicalize_emotion(fb)
+                                if ce not in filled:
+                                    filled.append(ce)
+                                if len(filled) >= 2:
+                                    break
+                    _ln["emotions"] = filled[:2]
+            except Exception:
+                pass
+
+            # === End clamp ===
+
             if idx == total - 1:
                 try:
                     tail = filtered[-20:] if len(

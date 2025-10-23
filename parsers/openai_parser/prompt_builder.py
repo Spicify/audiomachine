@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Dict, List, Optional, Set
+from utils.mode import get_emotions_mode
 
 
 def build_system_prompt(
@@ -10,6 +11,7 @@ def build_system_prompt(
     include_narration: bool,
     state_summary: Dict,
 ) -> str:
+    mode = get_emotions_mode()
     # Derived ONLY from EMOTION_TAGS keys
     ae = ", ".join(sorted(allowed_emotions))
     kc = ", ".join(sorted(known_characters)[
@@ -46,17 +48,40 @@ def build_system_prompt(
         "",
         "Emotion rules:",
         "- Provide exactly TWO emotions per line.",
-        "- Emotions must be from ALLOWED_EMOTIONS.",
+        # ↓↓↓ ONLY THIS PART CHANGES (conditional block) ↓↓↓
+        # (we append mode-specific guidance below)
+    ]
+
+    # --- begin minimal change block ---
+    if mode == "strict_list":
+        lines.append("- Emotions must be from ALLOWED_EMOTIONS.")
+    else:
+        # freeform_map: don't list the big set; guide towards TTS-friendly simple tags
+        lines.append(
+            "- Use short, simple, lowercase emotions (single words, no hyphens).")
+        lines.append(
+            "- Prefer common TTS-friendly adjectives; avoid rare/flowery terms.")
+        lines.append("  e.g., calm, soft, tense, angry, sad, happy, excited, fearful, surprised, serious, playful, sarcastic, tender, confident, nervous, warm, cold.")
+    # --- end minimal change block ---
+
+    lines.extend([
         "",
         "Formatting rules:",
         "- JSON object per line with keys: character, emotions, text.",
         "- candidates allowed only when character == 'Ambiguous'.",
         "",
         "Coverage rule: Do NOT skip or drop any input sentence. Every sentence from the input MUST appear as exactly one JSONL output line. If the sentence contains a mix of narration and dialogue, split it into multiple JSONL lines so that the final output still covers 100% of the input sentences with no omissions.",
-        f"ALLOWED_EMOTIONS: {ae}",
+    ])
+
+    # ↓↓↓ ONLY THIS LINE BECOMES CONDITIONAL ↓↓↓
+    if mode == "strict_list":
+        lines.append(f"ALLOWED_EMOTIONS: {ae}")
+
+    lines.extend([
         f"Known characters so far: {kc}",
         f"State summary: {json.dumps(state_summary, ensure_ascii=False)}",
-    ]
+    ])
+
     if include_narration:
         lines.append(
             "Include narration as 'Narrator' only for non-spoken descriptive text.")
@@ -66,7 +91,6 @@ def build_system_prompt(
 
     try:
         overlap_info = "unknown"
-        # We can't see overlap_sentences directly here; log coverage clause presence
         coverage_present = any(
             'Do NOT skip' in s or 'Do NOT skip or drop' in s for s in lines)
         print(
@@ -74,7 +98,7 @@ def build_system_prompt(
     except Exception:
         pass
 
-    # Few-shot pattern examples
+    # Few-shot pattern examples (unchanged)
     lines.extend([
         '{"character": "Brad", "emotions": ["angry", "tense"], "text": "Get up!"}',
         '{"character": "Narrator", "emotions": ["soft", "sad"], "text": "The sun was setting over the valley."}',
@@ -83,7 +107,8 @@ def build_system_prompt(
         'Input: "Keep your eyes on me," she commanded. → Output: {"character":"Maya","emotions":["commanding","dominant"],"text":"Keep your eyes on me."}',
         'Input: Aleksandr murmured, "You look beautiful." → Output: {"character":"Aleksandr","emotions":["gentle","warm"],"text":"You look beautiful."}',
     ])
-    # REJECTED clause to prevent silent drops and enforce explicit refusal tagging
+
+    # REJECTED clause (unchanged)
     lines.extend([
         "",
         "If you are unable to parse a sentence (for any reason such as policy, explicit content, or uncertainty),",

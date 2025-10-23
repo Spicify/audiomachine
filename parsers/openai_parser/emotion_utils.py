@@ -1,4 +1,6 @@
 from __future__ import annotations
+from utils.mode import get_emotions_mode
+import difflib
 
 import os
 import re
@@ -6,6 +8,79 @@ from collections import defaultdict, deque
 from typing import Deque, Dict, List, Optional, Set, Tuple
 
 from config_loader import EMOTION_TAGS, SPEECH_VERBS, VERB_TO_EMOTION, ADVERB_TO_EMOTION
+
+# Canonical, ElevenLabs-friendly vocabulary (keep small and stable)
+ELEVENLABS_SAFE = {
+    "calm", "soft", "tense", "angry", "sad", "happy", "excited", "fearful", "surprised",
+    "serious", "playful", "sarcastic", "tender", "confident", "nervous", "gentle", "warm", "cold",
+}
+
+# Frequently-seen variants/synonyms/typos → canonical
+SYN_TO_CANON = {
+    # calm-ish
+    "serene": "calm", "relaxed": "calm", "placid": "calm", "steady": "calm",
+    # soft-ish
+    "soothing": "soft", "mellow": "soft", "murmured": "soft",
+    # tense-ish
+    "anxious": "nervous", "worried": "nervous", "edgy": "tense", "strained": "tense",
+    # angry-ish
+    "furious": "angry", "irritated": "angry", "annoyed": "angry", "mad": "angry",
+    # sad-ish
+    "melancholic": "sad", "melancholy": "sad", "somber": "sad", "downcast": "sad",
+    # happy/excited-ish
+    "joyful": "happy", "cheerful": "happy", "elated": "excited", "euphoric": "excited",
+    # fearful-ish
+    "afraid": "fearful", "scared": "fearful", "terrified": "fearful",
+    # surprised-ish
+    "startled": "surprised", "shocked": "surprised",
+    # serious-ish
+    "stern": "serious", "grave": "serious",
+    # playful-ish
+    "flirty": "playful", "teasing": "playful", "mischievous": "playful",
+    # sarcastic-ish
+    "wry": "sarcastic", "dry": "sarcastic", "ironic": "sarcastic",
+    # tender-ish
+    "affectionate": "tender", "loving": "tender", "caring": "tender",
+    # confident-ish
+    "assured": "confident", "bold": "confident", "certain": "confident",
+    # nervous-ish
+    "uneasy": "nervous", "restless": "nervous", "jittery": "nervous",
+    # gentle-ish
+    "kind": "gentle", "mild": "gentle", "tenderly": "tender",  # helps suffix cases
+    # warm/cold
+    "kindly": "warm", "icy": "cold",
+}
+
+
+def _normalize_raw_tag(t: str) -> str:
+    t = (t or "").strip().lower().replace("-", " ")
+    # common derivational suffixes — only strip if it helps matching adjectives
+    for suf in ("ly", "ness", "ing", "ed"):
+        if t.endswith(suf) and len(t) > len(suf)+2:
+            t = t[: -len(suf)]
+            break
+    # keep first token (prefer single word)
+    return t.split()[0] if t else t
+
+
+def canonicalize_emotion(tag: str) -> str:
+    """Map arbitrary model tag → small ElevenLabs-safe set, with fuzzy fallback."""
+    raw = _normalize_raw_tag(tag)
+    if not raw:
+        return "calm"
+    # exact safe
+    if raw in ELEVENLABS_SAFE:
+        return raw
+    # synonym
+    if raw in SYN_TO_CANON:
+        mapped = SYN_TO_CANON[raw]
+        return mapped if mapped in ELEVENLABS_SAFE else "calm"
+    # fuzzy to SAFE
+    match = difflib.get_close_matches(
+        raw, list(ELEVENLABS_SAFE), n=1, cutoff=0.78)
+    if match:
+        return match[0]
+    return "calm"
 
 
 def get_allowed_emotions() -> Set[str]:
@@ -98,57 +173,56 @@ def diversify_emotion(second: str, recent: List[str], allowed: Set[str]) -> str:
     return c or "calm"
 
 
-def ensure_two_emotions(
-    character: str,
-    emotions: List[str],
-    text: str,
-    kb: Dict[str, str],
-    allowed: Set[str],
-    memory: EmotionMemory,
-) -> List[str]:
-    # Normalize and deduplicate
-    norm = []
-    seen: Set[str] = set()
-    for e in emotions or []:
+def ensure_two_emotions(character: str, emotions, text: str, kb=None, allowed=None, memory=None):
+    """
+    Return exactly 2 emotions.
+    - In "strict_list" mode: clamp to `allowed` if provided; fallback to safe defaults if needed.
+    - In "freeform_map" mode: canonicalize to ELEVENLABS_SAFE, then top-up deterministically.
+    """
+    ems = [str(e or "").strip()
+           for e in (emotions or []) if str(e or "").strip()]
+    out = []
+
+    mode = get_emotions_mode()
+    if mode == "strict_list":
+        allowed = set(allowed or [])
+        for e in ems:
+            if e in allowed:
+                out.append(e)
+            if len(out) == 2:
+                break
+        # top-up from allowed deterministically
+        if len(out) < 2:
+            for fb in ("calm", "soft", "tense", "warm", "gentle", "serious"):
+                if not allowed or fb in allowed:
+                    if fb not in out:
+                        out.append(fb)
+                if len(out) == 2:
+                    break
+        if not out:
+            out = ["calm", "soft"]
+        if len(out) == 1:
+            out.append(out[0])
+        return out[:2]
+
+    # freeform_map: canonicalize + top-up
+    for e in ems:
         ce = canonicalize_emotion(e)
-        if ce and ce in allowed and ce not in seen:
-            norm.append(ce)
-            seen.add(ce)
+        if ce not in out:
+            out.append(ce)
+        if len(out) == 2:
+            break
 
-    # Derive at least one from text if empty
-    if not norm:
-        d = derive_emotion_from_text(text, kb, allowed)
-        if d:
-            norm = [d]
+    if len(out) < 2:
+        for fb in ("calm", "soft", "tense", "warm", "gentle", "serious"):
+            ce = canonicalize_emotion(fb)
+            if ce not in out:
+                out.append(ce)
+            if len(out) == 2:
+                break
 
-    # If only one, derive a complementary one
-    if len(norm) == 1:
-        d2 = derive_emotion_from_text(text, kb, allowed)
-        if d2:
-            # diversify against recent
-            d2 = diversify_emotion(d2, memory.last_n(character, 4), allowed)
-            if d2 != norm[0]:
-                norm.append(d2)
-
-    # If more than 2, keep first two
-    if len(norm) > 2:
-        norm = norm[:2]
-
-    # Do not auto-fill to reach length 2; leave as-is (<2 allowed here)
-    # Optional debug log
-    try:
-        from .openai_parser import DEBUG_PARSER_DIAG as _DBG
-    except Exception:
-        _DBG = False
-    if _DBG and len(norm) < 2:
-        try:
-            print(
-                f"[EMOTION_FILL] skipped default text='{text[:60]}' emotions={norm}", flush=True)
-        except Exception:
-            pass
-
-    try:
-        print(f"[EMO] text='{text[:60]}' emotions={norm}", flush=True)
-    except Exception:
-        pass
-    return norm[:2]
+    if not out:
+        out = ["calm", "soft"]
+    if len(out) == 1:
+        out.append(out[0])
+    return out[:2]
