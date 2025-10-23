@@ -141,3 +141,8 @@ chunk=1 streaming_fallback_used=False problem_segments=4
 34.69 (12)
 20.53 (12)
 34.78 (11)
+7.97 (20)
+19.59 (12)
+22.14 (11)
+7.83 (8)
+22.55 (10)

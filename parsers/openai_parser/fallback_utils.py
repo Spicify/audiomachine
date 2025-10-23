@@ -111,6 +111,14 @@ def _normalize_text(s: str) -> str:
     return s.strip().lower()
 
 
+def _norm_for_compare_punct_neutral(s: str) -> str:
+    # existing helper; handles curly quotes/ellipsis
+    s = _norm_for_compare(s or "")
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    s = s.rstrip('.,;:!?"\'')
+    return s
+
+
 def _extract_quotes(text: str) -> list[str]:
     """Extract normalized quoted spans. Never raises; returns [] if none.
 
@@ -146,6 +154,18 @@ def _extract_quotes(text: str) -> list[str]:
 
 
 # Shared normalizer is imported as _norm_for_compare
+
+
+def _fb_is_attrib_only(text: str) -> bool:
+    if not text:
+        return False
+    if ('"' in text) or ('\u201C' in text) or ('\u201D' in text):
+        return False
+    t = text.strip()
+    if not re.match(r'^(?:[A-Z][a-z]+|[A-Z][A-Za-z\-]+|he|she|they)\b', t, flags=re.IGNORECASE):
+        return False
+    _ATTRIB_VERBS = r"(?:said|asked|replied|answered|added|remarked|observed|noted|stated|whispered|murmured|muttered|mumbled|stammered|stuttered|shouted|yelled|bellowed|thundered|exclaimed|snapped|barked|spat|warned|cried|sobbed|wailed|whimpered|gasped|moaned|groaned|panted|hissed|growled|snarled|grunted|pleaded|begged|implored|commanded|demanded|ordered|laughed|chuckled|giggled|snorted|teased|taunted|sighed|purred)"
+    return bool(re.search(rf"\b{_ATTRIB_VERBS}\b", t, flags=re.IGNORECASE))
 
 
 def _token_jaccard(a: str, b: str) -> float:
@@ -276,7 +296,7 @@ def _split_sentences(text: str) -> list[dict]:
         c = (c or "").strip()
         if not c:
             continue
-        norm = _normalize_text(c)
+        norm = _norm_for_compare_punct_neutral(c)
         if norm and norm not in {'"', "'"}:
             parts.append({"index": idx, "text": c, "norm": norm})
             idx += 1
@@ -306,7 +326,7 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
     - Compares chunk sentences to parsed output.
     """
     sent_infos = _split_sentences(chunk_text)
-    parsed_norm_texts = [_normalize_text(
+    parsed_norm_texts = [_norm_for_compare_punct_neutral(
         d.get("text", "")) for d in parsed_lines]
 
     uncovered_indices: list[int] = []
@@ -314,8 +334,18 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
         norm_sent = si["norm"]
         if not norm_sent:
             continue
+        # Baseline coverage by containment (neutral)
         covered = any(
             norm_sent in pt or pt in norm_sent for pt in parsed_norm_texts if pt)
+
+        # QUOTE-AWARE coverage: if the sentence has a quoted core that matches any parsed text, consider it covered
+        if not covered:
+            quoted_spans = _extract_quotes(si["text"])
+            if quoted_spans:
+                quoted_norms = [_norm_for_compare_punct_neutral(
+                    q) for q in quoted_spans]
+                if any(qn and any(qn == pt for pt in parsed_norm_texts) for qn in quoted_norms):
+                    covered = True
         # --- NEW: token-similarity fallback detection for partial misses ---
         if not covered:
             def _token_similarity(a: str, b: str) -> float:
@@ -526,6 +556,9 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
     if logger:
         logger(
             f"[REINJ_LINE] pos={anchor_pos} (positional-first) text='{(new_lines[0] or {}).get('text','')[:60]}'")
+    if logger:
+        logger(
+            f"[REINJ_LINE] pos={anchor_pos} (positional-first) text='{(new_lines[0] or {}).get('text','')[:60]}'")
 
     # Clamp insertion index without affecting logs
     insert_pos = anchor_pos
@@ -558,5 +591,38 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
     except Exception:
         pass
 
-    dialogues[insert_pos:insert_pos] = new_lines
+    # Final guards per-candidate before appending: quote-covered and attribution-only
+    guarded: list = []
+    try:
+        # Build parsed_norm_texts for quote coverage using existing dialogues as the parsed base
+        parsed_norm_texts = [_norm_for_compare_punct_neutral(
+            (ln or {}).get("text", "")) for ln in dialogues]
+        for _cand in (new_lines or []):
+            candidate_text = (_cand or {}).get("text", "") or ""
+            # Skip if quoted core already covered by parsed lines
+            qs = _extract_quotes(candidate_text)
+            if qs:
+                qs_norm = [_norm_for_compare_punct_neutral(q) for q in qs]
+                if any(qn and any(qn == pt for pt in parsed_norm_texts) for qn in qs_norm):
+                    try:
+                        print(
+                            "[REINJ_SKIP] reason=fb_quoted_already_covered", flush=True)
+                    except Exception:
+                        pass
+                    continue
+            # Skip attribution-only tails
+            if _fb_is_attrib_only(candidate_text):
+                try:
+                    print("[REINJ_SKIP] reason=fb_attrib_tail", flush=True)
+                except Exception:
+                    pass
+                continue
+            guarded.append(_cand)
+    except Exception:
+        guarded = list(new_lines or [])
+
+    if not guarded:
+        return dialogues
+
+    dialogues[insert_pos:insert_pos] = guarded
     return dialogues

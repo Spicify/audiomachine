@@ -162,7 +162,16 @@ def _simple_reinject_missing_as_narrator(original_text: str, lines: list) -> lis
         return parts
 
     def _normalize(s: str) -> str:
-        return _re.sub(r"\s+", " ", s).strip().lower()
+        s = (s or "")
+        # unify quotes/apostrophes/ellipsis
+        s = s.replace("\u201C", '"').replace("\u201D", '"')
+        s = s.replace("\u2018", "'").replace("\u2019", "'")
+        s = s.replace("\u2026", "...")
+        # lowercase + collapse
+        s = _re.sub(r"\s+", " ", s).strip().lower()
+        # strip terminal punctuation (tolerate comma/period differences)
+        s = s.rstrip('.,;:!?"\'')
+        return s
 
     raw_sents = _split_sentences_robust(original_text)
     raw_sents = [s for s in raw_sents if s.strip()]

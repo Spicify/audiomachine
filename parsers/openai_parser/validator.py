@@ -37,6 +37,29 @@ def validate_and_fix(
             base_rejected += 1
             continue
 
+        # Soft-allow new proper names output by the model (Titlecase, 1–3 words, no digits)
+        def _looks_like_proper_name(s: str) -> bool:
+            if not s or s in ("Narrator", "Ambiguous"):
+                return False
+            parts = [p for p in s.split() if p]
+            if not (1 <= len(parts) <= 3):
+                return False
+            for p in parts:
+                if any(ch.isdigit() for ch in p):
+                    return False
+                if not (p[0].isupper()):
+                    return False
+            return True
+
+        if char not in allowed_chars and _looks_like_proper_name(char):
+            try:
+                state.known_characters.add(char)
+                allowed_chars.add(char)
+                print(
+                    f"[VALIDATE] soft-allowed new character='{char}'", flush=True)
+            except Exception:
+                pass
+
         if char not in allowed_chars:
             char = "Ambiguous"
 
