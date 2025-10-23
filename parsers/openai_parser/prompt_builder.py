@@ -33,6 +33,8 @@ def build_system_prompt(
         "- Dialogue attribution (quoted speech):",
         "  * If quoted text is followed by said/asked/whispered/shouted/replied/murmured + a name or pronoun, infer that subject as the speaker.",
         "  * If a line starts with a name or pronoun and includes quoted text later, infer that subject as the speaker of the quoted dialogue.",
+        "  * If the name appears AFTER the quoted text within the same sentence (e.g., “...?” Aleksandr murmured), ATTRIBUTE the quoted text to that named character.",
+        "  * When both a quote and an attribution verb appear in one sentence, output exactly TWO lines: (1) the quote with the correct speaker, (2) the remaining descriptive clause as Narrator. Do NOT duplicate either.",
         "  * If narration and a quote coexist in one sentence, emit two JSONL lines: one for Narrator (non-quoted part) and one for the speaker (quoted part).",
         "  * First-person ('I', 'me', 'my') inside quotes indicates the speaking character, not Narrator.",
         "  * Never output duplicate Narrator lines repeating the same quoted text.",
@@ -106,6 +108,9 @@ def build_system_prompt(
         # Concise example for attribution verbs handling
         'Input: "Keep your eyes on me," she commanded. → Output: {"character":"Maya","emotions":["commanding","dominant"],"text":"Keep your eyes on me."}',
         'Input: Aleksandr murmured, "You look beautiful." → Output: {"character":"Aleksandr","emotions":["gentle","warm"],"text":"You look beautiful."}',
+        'Input: "You want to misbehave in public now?" Aleksandr murmured, lips at her ear. → Output (2 lines): ',
+        '{"character":"Aleksandr","emotions":["soft","warm"],"text":"You want to misbehave in public now?"}\n',
+        '{"character":"Narrator","emotions":["tender","intimate"],"text":"His lips were at her ear."}',
     ])
 
     # REJECTED clause (unchanged)

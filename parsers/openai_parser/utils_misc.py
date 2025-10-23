@@ -151,9 +151,9 @@ def _simple_reinject_missing_as_narrator(original_text: str, lines: list) -> lis
         t = t.replace("\u2026", "...")
 
         boundary = __re.compile(
-            r'(?<=[.!?])\s+'
-            r'|(?<=,")\s+'
-            r'|(?<=,)\s+'
+            r'(?<=[.!?])\s+'                  # sentence end
+            r'|(?<=,")\s+'                    # comma followed by closing quote
+            # r'|(?<=,)\s+'                   # ❌ removed: plain comma split caused attribution tails
             r'|(?<=\")\s+(?=(?:[A-Z]|he|she|they))'
             r'|(?<=\.)\s+(?=\")'
         )
@@ -188,9 +188,39 @@ def _simple_reinject_missing_as_narrator(original_text: str, lines: list) -> lis
         return False
 
     reinjected = []
+
+    # Pre-compute quoted spans from original_text for coverage decisions
+    try:
+        _q = re.findall(r'“([^”]+)”|"([^"]+)"', original_text or "")
+        _quoted_norm = {_normalize((a or b or ""))
+                        for (a, b) in _q if (a or b)}
+    except Exception:
+        _quoted_norm = set()
+
+    # broadened attribution-only detector to align with streaming
+    def _is_attrib_only_tail(txt: str) -> bool:
+        import re as __re
+        if not txt:
+            return False
+        if ('"' in txt) or ('\u201C' in txt) or ('\u201D' in txt):
+            return False
+        t2 = txt.strip()
+        if not __re.match(r'^(?:[A-Z][a-z]+|[A-Z][A-Za-z\-]+|he|she|they)\b', t2, flags=__re.IGNORECASE):
+            return False
+        _ATTRIB_VERBS2 = r"(?:said|asked|replied|answered|added|remarked|observed|noted|stated|whispered|murmured|muttered|mumbled|stammered|stuttered|shouted|yelled|bellowed|thundered|exclaimed|snapped|barked|spat|warned|cried|sobbed|wailed|whimpered|gasped|moaned|groaned|panted|hissed|growled|snarled|grunted|pleaded|begged|implored|commanded|demanded|ordered|laughed|chuckled|giggled|snorted|teased|taunted|sighed|purred)"
+        return bool(__re.search(rf"\b{_ATTRIB_VERBS2}\b", t2, flags=__re.IGNORECASE))
+
     for s in raw_sents:
         sn = _normalize(s)
         if not _covered(sn):
+            # Skip pure attribution tails if the quoted content is already covered
+            if _is_attrib_only_tail(s):
+                if _quoted_norm and any((_normalize(q) in produced_texts_norm) for q in _quoted_norm):
+                    try:
+                        print("[REINJ_SKIP] reason=attrib_tail_covered", flush=True)
+                    except Exception:
+                        pass
+                    continue
             reinjected.append({
                 "character": "Narrator",
                 "emotions": [],

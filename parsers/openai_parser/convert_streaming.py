@@ -22,6 +22,24 @@ from .utils_misc import _simple_reinject_missing_as_narrator, _build_sentence_to
 from utils.text_normalizer import normalize_text as _norm_for_compare
 
 
+def _is_attrib_only(text: str) -> bool:
+    import re as __re
+    if not text:
+        return False
+    # Must NOT contain quotes; otherwise it's not just an attribution tail
+    if ('"' in text) or ('\u201C' in text) or ('\u201D' in text):
+        return False
+    t = text.strip()
+    # Starts with a proper name or pronoun
+    if not __re.match(r'^(?:[A-Z][a-z]+|[A-Z][A-Za-z\-]+|he|she|they)\b', t, flags=__re.IGNORECASE):
+        return False
+    # Contains a known speech verb anywhere (allow trailing description and any punctuation)
+    _ATTRIB_VERBS = r"(?:said|asked|replied|answered|added|remarked|observed|noted|stated|whispered|murmured|muttered|mumbled|stammered|stuttered|shouted|yelled|bellowed|thundered|exclaimed|snapped|barked|spat|warned|cried|sobbed|wailed|whimpered|gasped|moaned|groaned|panted|hissed|growled|snarled|grunted|pleaded|begged|implored|commanded|demanded|ordered|laughed|chuckled|giggled|snorted|teased|taunted|sighed|purred)"
+    if not __re.search(rf"\b{_ATTRIB_VERBS}\b", t, flags=__re.IGNORECASE):
+        return False
+    return True
+
+
 def convert_stream(parser, raw_text: str) -> Iterator[Dict]:
     log_dir = Path("logs")
     try:
@@ -160,6 +178,15 @@ def convert_stream(parser, raw_text: str) -> Iterator[Dict]:
 
             fixed, warnings = validate_and_fix(
                 items, warnings, state, kb=parser.kb, allowed_emotions=parser.allowed_emotions, memory=parser.memory)
+            # Promote primary emotion from nearby speech verb context
+            try:
+                for _ln in fixed:
+                    ch_text = getattr(ch, "text", "") if "ch" in locals() else (
+                        chunk_text if "chunk_text" in locals() else "")
+                    if (_ln.get("character", " ").strip().lower() not in ("narrator", "rejected")) and (_ln.get("text") or ""):
+                        _promote_primary_emotion_from_context(ch_text, _ln)
+            except Exception:
+                pass
             for _ln in fixed:
                 try:
                     _ln.setdefault("_src", "ai")
@@ -526,6 +553,15 @@ def convert_stream(parser, raw_text: str) -> Iterator[Dict]:
                                 pass
                         for si in sent_infos:
                             if a <= si["index"] <= b:
+                                # Skip pure attribution-only tails
+                                if _is_attrib_only(si["text"]):
+                                    try:
+                                        print(
+                                            "[REINJ_SKIP] reason=stream_attrib_tail", flush=True)
+                                    except Exception:
+                                        pass
+                                    continue
+
                                 filtered.append({
                                     "character": "Narrator",
                                     "emotions": [],

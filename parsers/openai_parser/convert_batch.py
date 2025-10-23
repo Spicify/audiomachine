@@ -1,4 +1,5 @@
 from __future__ import annotations
+from utils.text_normalizer import normalize_text as _norm_for_compare
 
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -22,7 +23,63 @@ from .validator import validate_and_fix
 from .utils_misc import _dedupe_chunk_boundaries, _build_sentence_to_pos_map, _simple_reinject_missing_as_narrator, _preclean_jsonl
 from utils.session_logger import log_to_session, log_exception
 from .emotion_utils import ensure_two_emotions
-from utils.text_normalizer import normalize_text as _norm_for_compare
+from pathlib import Path as _P
+import json as _json
+import re as _re
+
+
+def _promote_primary_emotion_from_context(chunk_text: str, line: dict) -> None:
+    """Promote verb-mapped emotion to primary when an attribution verb is near the quote."""
+    try:
+        txt = (line or {}).get("text", "") or ""
+        if not txt:
+            return
+        # normalize quotes
+        hay = (chunk_text or "")
+        hay = hay.replace("“", '"').replace(
+            "”", '"').replace("‘", "'").replace("’", "'")
+        needle = txt.replace("“", '"').replace(
+            "”", '"').replace("‘", "'").replace("’", "'")
+        needle = needle.strip().rstrip('.,;:!?"\'')
+        i = hay.find(needle)
+        if i < 0:
+            return
+        span = hay[max(0, i-80): i+len(needle)+80]
+
+        # load verb->emotion mapping
+        vpath = None
+        for p in ("configs/verb_to_emotion.json", "../configs/verb_to_emotion.json", "../../configs/verb_to_emotion.json"):
+            if _P(p).exists():
+                vpath = p
+                break
+        if not vpath:
+            return
+        with open(vpath, "r", encoding="utf-8") as f:
+            v2e = _json.load(f)
+        verbs = "|".join(sorted([_re.escape(v)
+                         for v in v2e.keys()], key=len, reverse=True))
+        m = _re.search(rf"\b({verbs})\b", span, flags=_re.IGNORECASE)
+        if not m:
+            return
+        emo = str(v2e.get(m.group(1).lower(), "")).strip()
+        if not emo:
+            return
+
+        ems = list((line.get("emotions") or [])[:2])
+        out = [emo]
+        for e in ems:
+            if e and e.lower() != emo.lower():
+                out.append(e)
+            if len(out) >= 2:
+                break
+        line["emotions"] = out[:2]
+        try:
+            print(
+                f"[EMO_PROMOTE] verb='{m.group(1)}' → primary='{emo}' text='{needle[:60]}'", flush=True)
+        except Exception:
+            pass
+    except Exception:
+        return
 
 
 def convert_batch(parser, raw_text: str) -> RawParseResult:
@@ -162,6 +219,14 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
 
         fixed, warnings = validate_and_fix(
             items, warnings, state, kb=parser.kb, allowed_emotions=parser.allowed_emotions, memory=parser.memory)
+        # Promote primary emotion from nearby speech verb context
+        try:
+            for _ln in fixed:
+                chunk_txt = raw_text  # batch uses the current raw_text here
+                if (_ln.get("character", " ").strip().lower() not in ("narrator", "rejected")) and (_ln.get("text") or ""):
+                    _promote_primary_emotion_from_context(chunk_txt, _ln)
+        except Exception:
+            pass
         try:
             print(
                 f"[ATTR_SUMMARY] phase=pre_fallback { _attr_counts(fixed) }", flush=True)
