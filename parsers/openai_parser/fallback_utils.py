@@ -10,6 +10,10 @@ load_dotenv()
 print("[DEBUG] .env loaded for Frendli fallback")
 
 
+def _collapse_ws(s: str) -> str:
+    return re.sub(r"\s+", " ", s or "").strip()
+
+
 def _build_fallback_system_prompt(known_characters: list[str] | None = None) -> str:
     """Concise strict JSONL system prompt for fallback (≈25 lines)."""
     chars_str = ", ".join(known_characters or [])
@@ -106,17 +110,26 @@ def _normalize_text(s: str) -> str:
     }))
     s = s.strip(_QUOTE_CHARS)
     s = s.replace("—", " ").replace("–", "-")
-    # ✅ FIX: pass `s` to re.sub
-    s = re.sub(r"\s+", " ", s)
-    return s.strip().lower()
+    s = _collapse_ws(s)
+    return s.lower()
 
 
 def _norm_for_compare_punct_neutral(s: str) -> str:
     # existing helper; handles curly quotes/ellipsis
     s = _norm_for_compare(s or "")
-    s = re.sub(r"\s+", " ", s).strip().lower()
+    s = _collapse_ws(s).lower()
     s = s.rstrip('.,;:!?"\'')
     return s
+
+
+def _pnorm(s: str) -> str:
+    s = _norm_for_compare_punct_neutral(s or "")
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def _tok_sim(a: str, b: str) -> float:
+    at, bt = set((a or "").split()), set((b or "").split())
+    return (len(at & bt) / len(at | bt)) if (at and bt) else 0.0
 
 
 def _extract_quotes(text: str) -> list[str]:
@@ -198,66 +211,52 @@ def _sanitize_character(line: dict, known_characters: list[str] | None) -> dict:
 
 
 def filter_fallback_lines(segment_text: str, candidate_lines: list[dict]) -> list[dict]:
-    """Filter Friendli candidate lines against the source segment with robust fuzzy match.
+    """Filter Friendli candidate lines against the specific problem segment text.
 
-    Acceptance:
-    - edit ratio ≥ 0.55 OR
-    - short utterances (<6 tokens): token jaccard ≥ 0.6
-    - if both ≤4 tokens and share ≥1 token → accept
-    Logs one [FB_FUZZY] per candidate.
+    - Narrator: keep if contained in segment or token-similarity ≥ 0.30
+    - Dialogue with quotes: keep if matches any quoted span or token-similarity ≥ 0.50 against a quoted span
+    - Dialogue without quotes: keep if contained in segment or token-similarity ≥ 0.45
+    Logs [FB_FUZZY_KEEP]/[FB_FUZZY_DROP] per-candidate.
     """
-    src_quotes = _extract_quotes(segment_text)
-    source_text = src_quotes[0] if src_quotes else segment_text
-    src_n = _norm_for_compare(source_text or "")
-    # inside filter_fallback_lines(...)
-    kept = []
-    first_scored = None
     try:
-        src_n = _norm_for_compare(source_text or "")
-        for idx, ln in enumerate(candidate_lines or []):
-            txt = (ln or {}).get("text", "")
-            cand_n = _norm_for_compare(txt)
-            jacc = _token_jaccard(src_n, cand_n)
-            edit = _edit_ratio(src_n, cand_n)
-            cand_tokens = len((cand_n or "").split())
+        seg_text = (segment_text or "")
+        seg_norm = _pnorm(seg_text)
+        quoted_in_seg = set(_pnorm(q) for q in _extract_quotes(seg_text))
 
-            keep = False
-            if edit >= 0.55:
-                keep = True
-            elif cand_tokens < 6 and jacc >= 0.6:
-                keep = True
-            else:
-                both_short = len((src_n or "").split()
-                                 ) <= 4 and cand_tokens <= 4
-                shared = jacc > 0.0
-                if both_short and shared:
-                    keep = True
-
-            # debug print for each candidate
+        kept: list[dict] = []
+        for ln in (candidate_lines or []):
             try:
-                print(
-                    f"[FB_FUZZY] src='{(source_text or '')[:60]}' cand='{(txt or '')[:60]}' jacc={jacc:.2f} edit={edit:.2f} keep={keep}",
-                    flush=True,
-                )
+                cand = _pnorm((ln or {}).get("text", ""))
+                ch = (ln or {}).get("character", "") or ""
+                keep = False
+                reason = ""
+
+                if ch == "Narrator":
+                    if (cand and (cand in seg_norm or seg_norm.find(cand) >= 0)) or _tok_sim(cand, seg_norm) >= 0.30:
+                        keep, reason = True, "narr_contained_or_sim>=0.30"
+                else:
+                    if quoted_in_seg:
+                        if cand in quoted_in_seg or any(_tok_sim(cand, q) >= 0.50 for q in quoted_in_seg):
+                            keep, reason = True, "quoted_match"
+                    else:
+                        if (cand and (cand in seg_norm or seg_norm.find(cand) >= 0)) or _tok_sim(cand, seg_norm) >= 0.45:
+                            keep, reason = True, "no_quotes_seg_match"
+
+                if keep:
+                    try:
+                        print(
+                            f"[FB_FUZZY_KEEP] ch={ch} reason={reason} text='{(ln.get('text','') or '')[:80]}'", flush=True)
+                    except Exception:
+                        pass
+                    kept.append(ln)
+                else:
+                    try:
+                        print(
+                            f"[FB_FUZZY_DROP] ch={ch} text='{(ln.get('text','') or '')[:80]}'", flush=True)
+                    except Exception:
+                        pass
             except Exception:
-                pass
-
-            # record top candidate's decision (idx==0)
-            if idx == 0:
-                first_scored = (keep, jacc, edit, (source_text or '')[
-                                :60], (txt or '')[:60])
-
-            if keep:
-                kept.append(ln)
-
-        # after loop, if top candidate was rejected, log it once
-        if first_scored and not first_scored[0]:
-            try:
-                print(
-                    f"[REINJ_REJECT] reason=fuzzy_below_thresh src='{first_scored[3]}' top='{first_scored[4]}' jacc={first_scored[1]:.2f} edit={first_scored[2]:.2f}",
-                    flush=True,
-                )
-            except Exception:
+                # on per-candidate error, drop silently
                 pass
 
         return kept
@@ -289,7 +288,7 @@ def _split_sentences(text: str) -> list[dict]:
     if not text:
         return parts
     # Normalize whitespace without altering content semantics
-    norm_text = re.sub(r"\s+", " ", text.strip())
+    norm_text = _collapse_ws(text)
     chunks = re.split(_SENT_SPLIT_RX, norm_text)
     idx = 0
     for c in chunks:
@@ -488,7 +487,7 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
             return ""
         s = s.replace("\u201C", '"').replace("\u201D", '"')
         s = s.replace("\u2018", "'").replace("\u2019", "'")
-        s = re.sub(r"\s+", " ").strip().lower()
+        s = _collapse_ws(s).lower()
         return s
 
     def _clamp(i: int, lo: int, hi: int) -> int:
@@ -624,5 +623,31 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
     if not guarded:
         return dialogues
 
-    dialogues[insert_pos:insert_pos] = guarded
+    before = len(dialogues)
+    try:
+        dialogues[insert_pos:insert_pos] = guarded
+    except Exception as e:
+        import traceback
+        try:
+            print(f"[REINJ_FAIL][FALLBACK] {e}", flush=True)
+        except Exception:
+            pass
+        try:
+            traceback.print_exc()
+        except Exception:
+            pass
+        # safety: still keep the lines rather than losing them
+        try:
+            dialogues.extend([{**ln, "_src": ln.get("_src", "fb")}
+                             for ln in (new_lines or [])])
+        except Exception:
+            # last-resort: append as-is
+            try:
+                dialogues.extend(list(new_lines or []))
+            except Exception:
+                pass
+    try:
+        print(f"[REINJ_OK] added={len(dialogues)-before}", flush=True)
+    except Exception:
+        pass
     return dialogues

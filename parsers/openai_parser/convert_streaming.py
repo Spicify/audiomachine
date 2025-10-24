@@ -162,6 +162,51 @@ def convert_stream(parser, raw_text: str) -> Iterator[Dict]:
                 print(
                     f">>> Parsed after retry: {len(items)} items", flush=True)
 
+            try:
+                from collections import Counter
+                import os
+                import json
+                char_counts = Counter(
+                    [str((it or {}).get("character", "")).strip() or "<empty>" for it in (items or [])])
+                _dbg_items_total = len(items or [])
+                _dbg_rej = sum(1 for it in (items or []) if str(
+                    (it or {}).get("character", "")).strip().upper() == "REJECTED")
+                print(
+                    f"[RAW_DIST] total={_dbg_items_total} counts={dict(char_counts)}", flush=True)
+
+                # TEMP: extra log for first chunk
+                try:
+                    _dbg_chunk_idx = (chunk_index if 'chunk_index' in locals()
+                                      else (i if 'i' in locals() else 0))
+                    if _dbg_chunk_idx in (0, 1):  # depending on 0- or 1-based
+                        for k, it in enumerate(items[:50]):
+                            print(f"[RAW_FIRST50][{k:02d}] {it}", flush=True)
+                except Exception:
+                    pass
+
+                if _dbg_items_total > 0 and _dbg_rej / max(1, _dbg_items_total) >= 0.5:
+                    ts = time.strftime("%Y%m%d-%H%M%S")
+                    outdir = os.path.join("logs", "raw_chunks")
+                    os.makedirs(outdir, exist_ok=True)
+                    # chunk index var names differ; try both
+                    _dbg_chunk_idx = (chunk_index if 'chunk_index' in locals()
+                                      else (i if 'i' in locals() else 0))
+                    path = os.path.join(
+                        outdir, f"raw_chunk_{_dbg_chunk_idx}_{ts}.jsonl")
+                    with open(path, "w", encoding="utf-8") as f:
+                        for it in (items or []):
+                            try:
+                                f.write(json.dumps(
+                                    it, ensure_ascii=False) + "\n")
+                            except Exception:
+                                f.write(str(it) + "\n")
+                    print(f"[RAW_DUMP] path={path}", flush=True)
+            except Exception as e:
+                try:
+                    print(f"[RAW_DIST_ERR] {e}", flush=True)
+                except Exception:
+                    pass
+
             chunk_ambs: List[Dict[str, Any]] = []
             for it in items:
                 if str(it.get("character", "")).strip().lower() == "ambiguous":

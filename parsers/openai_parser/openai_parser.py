@@ -54,7 +54,7 @@ class OpenAIParser:
         self,
         model: str = "gpt-5-mini",
         include_narration: bool = True,
-        max_tokens_per_chunk: int = 1500,
+        max_tokens_per_chunk: int = 1000,
         debug_save: bool = False,
     ):
         self.client = OpenAI(api_key=OPENAI_API_KEY)

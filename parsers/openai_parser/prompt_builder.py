@@ -116,14 +116,12 @@ def build_system_prompt(
     # REJECTED clause (unchanged)
     lines.extend([
         "",
-        "If you are unable to parse a sentence (for any reason such as policy, explicit content, or uncertainty),",
-        "DO NOT skip or alter it.",
-        "Instead, output this exact JSON line:",
-        "",
+        # REJECTED: policy-only, never for uncertainty
+        "If and only if the platform’s safety policy prevents you from returning any text from a given sentence,",
+        "output exactly one JSON line:",
         '{"character": "REJECTED", "emotions": ["soft","sad"], "text": "<REJECTED_LINE>"}',
-        "",
-        "where <REJECTED_LINE> is the original sentence you refused to parse.",
-        "This tag must be standalone, separate from other lines, and should not affect the rest of the output.",
+        "where <REJECTED_LINE> is the original sentence verbatim.",
+        "Do NOT use REJECTED for uncertainty, ambiguity, tricky attribution, formatting errors, or lack of confidence.",
     ])
     return "\n".join(lines)
 

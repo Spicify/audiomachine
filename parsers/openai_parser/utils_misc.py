@@ -230,6 +230,20 @@ def _simple_reinject_missing_as_narrator(original_text: str, lines: list) -> lis
                     except Exception:
                         pass
                     continue
+
+            def _is_raw_quote(s: str) -> bool:
+                t = (s or "")
+                return ('"' in t) or ('\u201C' in t) or ('\u201D' in t)
+            if _is_raw_quote(s):
+                snq = _normalize(s).rstrip('.,;:!?"\'')
+                # if this sentence is essentially just a quoted span that is already present in outputs, skip
+                if snq in _quoted_norm and any(snq == pt for pt in produced_texts_norm):
+                    try:
+                        print(
+                            "[REINJ_SKIP] reason=raw_quote_already_covered", flush=True)
+                    except Exception:
+                        pass
+                    continue
             reinjected.append({
                 "character": "Narrator",
                 "emotions": [],

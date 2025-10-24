@@ -25,6 +25,11 @@ def validate_and_fix(
 
     for it in items or []:
         if str(it.get("character", "")).upper() == "REJECTED":
+            try:
+                print("[VALIDATE_DIAG] dropping=REJECTED sample=",
+                      (it if isinstance(it, dict) else str(it)), flush=True)
+            except Exception:
+                pass
             result.append(it)
             base_rejected += 1
             continue
@@ -34,6 +39,11 @@ def validate_and_fix(
         ems = it.get("emotions") or []
 
         if not txt:
+            try:
+                print("[VALIDATE_DIAG] dropping=EMPTY_TEXT sample=",
+                      (it if isinstance(it, dict) else str(it)), flush=True)
+            except Exception:
+                pass
             base_rejected += 1
             continue
 
@@ -115,6 +125,11 @@ def validate_and_fix(
     try:
         print(
             f"[VALIDATE] base_valid={base_valid} base_rejected={base_rejected}", flush=True)
+    except Exception:
+        pass
+    try:
+        print(
+            f"[VALIDATE_SUMMARY] base_valid={base_valid} base_rejected={base_rejected} allowed_chars={len(allowed_chars)}", flush=True)
     except Exception:
         pass
     return result, warnings
