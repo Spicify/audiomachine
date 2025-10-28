@@ -30,6 +30,43 @@ def _split_into_sentences(text: str) -> List[str]:
     return [p.strip() for p in parts if p and p.strip()]
 
 
+def _split_into_sentences_with_spans(text: str) -> List[Tuple[str, int, int]]:
+    """Split using the same boundary regex as _split_into_sentences, but return (text, start, end) spans.
+
+    - start/end are character offsets in the original text for the trimmed sentence substring.
+    - No behavior change to chunking; exported for diagnostics/ledger only.
+    """
+    if not text:
+        return []
+    spans: List[Tuple[str, int, int]] = []
+    start = 0
+    for m in _SENT_SPLIT_RE.finditer(text):
+        end = m.start()
+        raw = text[start:end]
+        if raw:
+            # trim and adjust indices accordingly
+            ltrim = len(raw) - len(raw.lstrip())
+            rtrim = len(raw.rstrip())
+            seg = raw.strip()
+            if seg:
+                seg_start = start + ltrim
+                seg_end = start + rtrim
+                spans.append((seg, seg_start, seg_end))
+        start = m.end()
+    # tail
+    if start <= len(text):
+        raw = text[start:]
+        if raw:
+            ltrim = len(raw) - len(raw.lstrip())
+            rtrim = len(raw.rstrip())
+            seg = raw.strip()
+            if seg:
+                seg_start = start + ltrim
+                seg_end = start + rtrim
+                spans.append((seg, seg_start, seg_end))
+    return spans
+
+
 def _split_into_paragraphs(text: str) -> List[str]:
     parts = re.split(r"\n{2,}", text)
     return [p.strip() for p in parts if p and p.strip()]

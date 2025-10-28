@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from .core_types import DialogueLine, ParserState
 from .emotion_utils import ensure_two_emotions, canonicalize_emotion
 from utils.mode import get_emotions_mode
+from .diag import diag_enabled, diag_print
 
 
 def validate_and_fix(
@@ -30,6 +31,12 @@ def validate_and_fix(
                       (it if isinstance(it, dict) else str(it)), flush=True)
             except Exception:
                 pass
+            if diag_enabled():
+                try:
+                    reason = "policy?"
+                    diag_print(f"[REJECTED_FLAG] reason={reason}")
+                except Exception:
+                    pass
             result.append(it)
             base_rejected += 1
             continue
@@ -100,6 +107,14 @@ def validate_and_fix(
                      for c in (it.get("candidates") or []) if str(c).strip()]
             if cands:
                 fixed["candidates"] = cands[:5]
+                # Ambiguity diagnostics for quote-then-name patterns
+                if diag_enabled():
+                    try:
+                        tail_tokens = (txt or "").split()[-4:]
+                        diag_print(
+                            f"[AMBIG_QUOTE_TAIL] tail={' '.join(tail_tokens)}")
+                    except Exception:
+                        pass
 
         try:
             DialogueLine(**fixed)

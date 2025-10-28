@@ -7,6 +7,7 @@ from pathlib import Path
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from utils.log_instrumentation import log_timed_action
+from .diag import diag_enabled, diag_print, nsfw_marker_present, preview, approx_token_len
 
 
 def _save_debug_output(raw_text: str, suffix: str = "", debug_save: bool = False) -> None:
@@ -27,6 +28,13 @@ def _save_debug_output(raw_text: str, suffix: str = "", debug_save: bool = False
 def _call_openai(system_prompt: str, user_prompt: str, *, client, model: str, on_elapsed=None) -> str:
     start_time = time.monotonic()
     print(">>> Calling OpenAI…", flush=True)
+    if diag_enabled():
+        try:
+            diag_print(
+                f"[LLM_REQ] engine=OpenAI chunk_idx={_DIAG_CTX.get('chunk_idx','-')} chunk_first50='{preview(user_prompt,50)}' prompt_len_chars={len(user_prompt or '')} prompt_len_tokens~={approx_token_len(user_prompt or '')} params={{model:'{model}'}} nsfw_in_prompt={nsfw_marker_present(user_prompt or '')}"
+            )
+        except Exception:
+            pass
     response = client.responses.create(
         model=model,
         input=[
@@ -36,6 +44,18 @@ def _call_openai(system_prompt: str, user_prompt: str, *, client, model: str, on
     )
     out = (response.output_text or "").strip()
     elapsed = (time.monotonic() - start_time)
+    if diag_enabled():
+        try:
+            http_status = getattr(
+                getattr(response, "_response", None), "status_code", None)
+        except Exception:
+            http_status = None
+        diag_print(
+            f"[LLM_RESP] engine=OpenAI http_status={http_status or 'n/a'} elapsed_ms={elapsed*1000.0:.0f} content_len={len(out)} nsfw_in_resp={nsfw_marker_present(out)}"
+        )
+        if not out:
+            diag_print(
+                f"[LLM_EMPTY] engine=OpenAI chunk_idx={_DIAG_CTX.get('chunk_idx','-')}")
     if on_elapsed is not None:
         try:
             on_elapsed(elapsed)

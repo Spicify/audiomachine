@@ -4,6 +4,7 @@ import time
 import re
 from dotenv import load_dotenv
 from utils.text_normalizer import normalize_text as _norm_for_compare
+from .diag import diag_enabled, diag_print, nsfw_marker_present, preview, approx_token_len
 
 # Ensure .env is loaded before reading environment variables
 load_dotenv()
@@ -80,6 +81,14 @@ def call_frendli_fallback(system_prompt: str, user_prompt: str, known_characters
         pass
 
     start = time.monotonic()
+    if diag_enabled():
+        try:
+            _stop = None
+            diag_print(
+                f"[LLM_REQ] engine=Friendli chunk_idx={_DIAG_CTX.get('chunk_idx','-')} chunk_first50='{preview(user_prompt,50)}' prompt_len_chars={len(user_prompt or '')} prompt_len_tokens~={approx_token_len(user_prompt or '')} params={{model:'mistralai/Mistral-Small-3.1-24B-Instruct-2503'}} nsfw_in_prompt={nsfw_marker_present(user_prompt or '')}"
+            )
+        except Exception:
+            pass
     print("[DEBUG] Frendli request begin", flush=True)
     try:
         response = client.chat.completions.create(
@@ -92,10 +101,25 @@ def call_frendli_fallback(system_prompt: str, user_prompt: str, known_characters
         out = response.choices[0].message.content if response and getattr(
             response, "choices", None) else ""
         elapsed = (time.monotonic() - start)
+        if diag_enabled():
+            try:
+                http_status = getattr(
+                    getattr(response, "_response", None), "status_code", None)
+            except Exception:
+                http_status = None
+            diag_print(
+                f"[LLM_RESP] engine=Friendli http_status={http_status or 'n/a'} elapsed_ms={elapsed*1000.0:.0f} content_len={len(out)} nsfw_in_resp={nsfw_marker_present(out)}"
+            )
+            if not out:
+                diag_print(
+                    f"[LLM_EMPTY] engine=Friendli chunk_idx={_DIAG_CTX.get('chunk_idx','-')}")
         print(
             f"[DEBUG] Frendli request end ({elapsed*1000.0:.0f} ms, chars={len(out)})", flush=True)
         return out
     except Exception as e:
+        if diag_enabled():
+            diag_print(
+                f"[LLM_ERR] engine=Friendli err={type(e).__name__}:{str(e)[:200]}")
         print(f"[ERROR] Frendli request failed: {repr(e)}", flush=True)
         raise
 
@@ -283,6 +307,40 @@ def filter_fallback_lines(segment_text: str, candidate_lines: list[dict]) -> lis
 _SENT_SPLIT_RX = re.compile(r'(?<=[.!?])\s+')
 
 
+_DIAG_CTX: dict = {"chunk_idx": None, "tail_appends": {}}
+
+
+def _set_diag_context(*, chunk_idx: int | None = None) -> None:
+    if not diag_enabled():
+        return
+    try:
+        if chunk_idx is not None:
+            _DIAG_CTX["chunk_idx"] = int(chunk_idx)
+    except Exception:
+        pass
+
+
+def _bump_tail_append() -> None:
+    if not diag_enabled():
+        return
+    try:
+        ci = _DIAG_CTX.get("chunk_idx")
+        if ci is None:
+            return
+        _DIAG_CTX.setdefault("tail_appends", {})
+        _DIAG_CTX["tail_appends"][ci] = 1 + \
+            int(_DIAG_CTX["tail_appends"].get(ci, 0))
+    except Exception:
+        pass
+
+
+def _get_tail_appends(chunk_idx: int) -> int:
+    try:
+        return int(_DIAG_CTX.get("tail_appends", {}).get(chunk_idx, 0))
+    except Exception:
+        return 0
+
+
 def _split_sentences(text: str) -> list[dict]:
     parts: list[dict] = []
     if not text:
@@ -291,13 +349,17 @@ def _split_sentences(text: str) -> list[dict]:
     norm_text = _collapse_ws(text)
     chunks = re.split(_SENT_SPLIT_RX, norm_text)
     idx = 0
+    import hashlib as _hashlib
     for c in chunks:
         c = (c or "").strip()
         if not c:
             continue
         norm = _norm_for_compare_punct_neutral(c)
         if norm and norm not in {'"', "'"}:
-            parts.append({"index": idx, "text": c, "norm": norm})
+            sid_src = norm.lower().encode("utf-8", "ignore")
+            sent_id = _hashlib.sha1(sid_src).hexdigest()[:10]
+            parts.append({"index": idx, "text": c,
+                         "norm": norm, "sent_id": sent_id})
             idx += 1
     return parts
 
@@ -318,7 +380,7 @@ def _group_consecutive(indices: list[int]) -> list[tuple[int, int]]:
     return groups
 
 
-def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
+def detect_missing_or_rejected_lines(chunk_text, parsed_lines, *, ledger: list | None = None, chapter_char_offset: int = 0, **kwargs):
     """
     Detects missing or rejected lines from OpenAI output.
     - Finds explicit REJECTED tags.
@@ -336,6 +398,7 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
         # Baseline coverage by containment (neutral)
         covered = any(
             norm_sent in pt or pt in norm_sent for pt in parsed_norm_texts if pt)
+        reason = "prefix" if covered else "none"
 
         # QUOTE-AWARE coverage: if the sentence has a quoted core that matches any parsed text, consider it covered
         if not covered:
@@ -345,6 +408,7 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
                     q) for q in quoted_spans]
                 if any(qn and any(qn == pt for pt in parsed_norm_texts) for qn in quoted_norms):
                     covered = True
+                    reason = "verbatim"
         # --- NEW: token-similarity fallback detection for partial misses ---
         if not covered:
             def _token_similarity(a: str, b: str) -> float:
@@ -363,6 +427,7 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
                 sim = _token_similarity(norm_sent, pt)
                 if sim >= 0.6:
                     covered = True
+                    reason = f"fuzzy"
                     break
             if not covered:
                 try:
@@ -370,6 +435,19 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
                         f"[DIAG][SIM] missing segment detected by token similarity (no match ≥0.6): '{norm_sent[:80]}'", flush=True)
                 except Exception:
                     pass
+        # [COVERAGE] log per-sentence decision
+        if diag_enabled():
+            try:
+                _ll = "unavailable"
+                if isinstance(ledger, list):
+                    # best-effort: find ledger idx by start_char/end_char containment against si text span if we had spans
+                    # we don't have direct spans from here, so just note unavailable to avoid behavior change
+                    _ll = "unavailable"
+                diag_print(
+                    f"[COVERAGE] sent_id={si.get('sent_id','??????????')} chunk_idx={_DIAG_CTX.get('chunk_idx','-')} covered={bool(covered)} reason={reason} sim={'-' if reason!='fuzzy' else f'{sim:.2f}' if 'sim' in locals() else '-'}")
+                diag_print(f"[LEDGER_LINK] {_ll}")
+            except Exception:
+                pass
         if not covered:
             uncovered_indices.append(si["index"])
 
@@ -378,12 +456,22 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
     for start_idx, end_idx in missing_groups:
         joined_text = "\n".join(
             si["text"] for si in sent_infos if start_idx <= si["index"] <= end_idx)
-        missing_segments.append({
+        seg = {
             "start_idx": start_idx,
             "end_idx": end_idx,
             "text": joined_text,
             "kind": "missing",
-        })
+        }
+        missing_segments.append(seg)
+        if diag_enabled():
+            try:
+                # choose the first sentence id in the span for reference
+                sid = next((si.get("sent_id")
+                           for si in sent_infos if si["index"] == start_idx), "??????????")
+                diag_print(
+                    f"[REINJECT_DECIDE] sent_id={sid} target_idx={start_idx} reason=missing")
+            except Exception:
+                pass
 
     rejected_segments = []
     for l in parsed_lines:
@@ -399,12 +487,79 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
                     best_i = si["index"]
                     break
             if best_i is not None:
-                rejected_segments.append({
+                seg = {
                     "start_idx": best_i,
                     "end_idx": best_i,
                     "text": rtxt,
                     "kind": "rejected",
-                })
+                }
+                rejected_segments.append(seg)
+                if diag_enabled():
+                    try:
+                        diag_print(
+                            f"[REINJECT_DECIDE] sent_id={'-' } target_idx={best_i} reason=rejected")
+                    except Exception:
+                        pass
+
+    # Ledger window binding for segments (best-effort)
+    if isinstance(ledger, list) and ledger:
+        try:
+            from parsers.openai_parser.utils_misc import normalize_for_sid as _norm_sid
+        except Exception:
+            def _norm_sid(s: str) -> str:
+                import re as __re
+                return __re.sub(r"\s+", " ", (s or "").strip().lower())
+
+        _ledger_norms = [_norm_sid((d or {}).get("text", "")) for d in ledger]
+        for _seg in (missing_segments + rejected_segments):
+            try:
+                a = int(_seg.get("start_idx", 0))
+                b = int(_seg.get("end_idx", a))
+            except Exception:
+                a, b = 0, 0
+            if b < a:
+                b = a
+            _cand_idxs: list[int] = []
+            if a <= b and sent_infos:
+                for si in sent_infos:
+                    if not (a <= si["index"] <= b):
+                        continue
+                    sn = _norm_sid(si.get("text", ""))
+                    try:
+                        pos = _ledger_norms.index(sn)
+                    except ValueError:
+                        pos = -1
+                    if pos >= 0:
+                        _cand_idxs.append(pos)
+            if not _cand_idxs:
+                # Fallback: containment search from the segment combined text
+                seg_text_norm = _norm_sid(_seg.get("text", ""))
+                first_idx = None
+                last_idx = None
+                for i, ln in enumerate(_ledger_norms):
+                    if ln and (ln in seg_text_norm or seg_text_norm in ln):
+                        if first_idx is None:
+                            first_idx = i
+                        last_idx = i
+                if first_idx is not None and last_idx is not None:
+                    _cand_idxs = list(range(first_idx, last_idx+1))
+            if _cand_idxs:
+                first_idx = min(_cand_idxs)
+                last_idx = max(_cand_idxs)
+            else:
+                first_idx = None
+                last_idx = None
+            _seg["ledger_start_idx"] = first_idx
+            _seg["ledger_end_idx"] = last_idx
+            if diag_enabled():
+                try:
+                    seg_id = f"{_seg.get('kind','seg')}:{a}-{b}"
+                    size = (last_idx - first_idx +
+                            1) if (first_idx is not None and last_idx is not None) else 0
+                    diag_print(
+                        f"[SEG_LEDGER_WINDOW] seg_id={seg_id} start_idx={first_idx} end_idx={last_idx} size={size}")
+                except Exception:
+                    pass
 
     # --- SAFETY NET: Always ensure at least one rejected segment exists if OpenAI emitted REJECTED lines ---
     try:
@@ -467,6 +622,123 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines):
     return filtered
 
 
+def _resolve_candidate_sid(candidate_text: str, ledger: list, start_idx: int, end_idx: int):
+    """
+    Return (sid, sid_span) where sid is a single ledger sid, or sid_span=(sid1, sid2) if the candidate merges adjacent sentences.
+    Constrain search to [start_idx, end_idx]. Return (None, None) if nothing matches.
+    """
+    try:
+        from parsers.openai_parser.utils_misc import normalize_for_sid as _norm_sid
+    except Exception:
+        def _norm_sid(s: str) -> str:
+            import re as __re
+            return __re.sub(r"\s+", " ", (s or "").strip().lower())
+
+    cand_norm = _norm_sid(candidate_text or "")
+    if not isinstance(ledger, list) or not ledger:
+        return None, None
+    lo = max(0, int(start_idx or 0))
+    hi = min(len(ledger)-1, int(end_idx or 0)
+             ) if end_idx is not None else len(ledger)-1
+
+    # 1) direct containment of a single ledger sentence
+    for i in range(lo, hi+1):
+        try:
+            sn = _norm_sid((ledger[i] or {}).get("text", ""))
+            if sn and (sn in cand_norm or cand_norm in sn):
+                return (ledger[i].get("sid"), None)
+        except Exception:
+            continue
+
+    # 2) adjacent concatenation (two-sentence merge)
+    glues = [" ", ", ", '" ', ' "']
+    for i in range(lo, max(lo, hi)):
+        try:
+            a = _norm_sid((ledger[i] or {}).get("text", ""))
+            b = _norm_sid((ledger[i+1] or {}).get("text", ""))
+        except Exception:
+            continue
+        for g in glues:
+            joined = f"{a}{g}{b}".strip()
+            if joined and (joined in cand_norm or cand_norm in joined):
+                return (None, (ledger[i].get("sid"), ledger[i+1].get("sid")))
+
+    # 3) quote-like partial: attempt text containment only (no spans)
+    t = candidate_text or ""
+    looks_quote = (t.startswith('"') or t.startswith('\u201C')
+                   or t.endswith('"') or t.endswith('\u201D') or ('"' in t))
+    if looks_quote:
+        for i in range(lo, hi+1):
+            try:
+                sn = _norm_sid((ledger[i] or {}).get("text", ""))
+            except Exception:
+                continue
+            if sn and (sn in cand_norm or cand_norm in sn):
+                return (ledger[i].get("sid"), None)
+        return None, None
+
+    return None, None
+
+
+def annotate_candidates_with_sid(candidates: list, *, ledger: list | None, seg_obj: dict, chunk_idx: int | None = None) -> tuple[int, int]:
+    """Annotate candidate dicts with _target_sid/_target_sid_span within the segment's ledger window.
+    Logs per-candidate resolution and returns (mapped_count, unmapped_count).
+    No behavior change; purely diagnostic tagging.
+    """
+    mapped, unmapped = 0, 0
+    if not isinstance(candidates, list):
+        return mapped, unmapped
+    ls = seg_obj.get("ledger_start_idx") if isinstance(seg_obj, dict) else None
+    le = seg_obj.get("ledger_end_idx") if isinstance(seg_obj, dict) else None
+    seg_id = f"{seg_obj.get('kind','seg')}:{seg_obj.get('start_idx',0)}-{seg_obj.get('end_idx',0)}" if isinstance(
+        seg_obj, dict) else "seg:?"
+    for j, cand in enumerate(candidates):
+        if ls is None or le is None or not (isinstance(ledger, list) and ledger):
+            if diag_enabled():
+                try:
+                    diag_print(
+                        f"[SID_RESOLVE_FAIL] seg={seg_id} cand_idx={j} reason=no-window window=({ls},{le})")
+                except Exception:
+                    pass
+            cand["_target_sid"] = None
+            cand["_target_sid_span"] = None
+            unmapped += 1
+            continue
+        sid, sid_span = _resolve_candidate_sid(
+            (cand or {}).get("text", ""), ledger, int(ls), int(le))
+        if sid:
+            cand["_target_sid"] = sid
+            cand["_target_sid_span"] = None
+            mapped += 1
+            if diag_enabled():
+                try:
+                    diag_print(
+                        f"[SID_RESOLVE] seg={seg_id} cand_idx={j} sid={sid} span={'-'} preview='{preview((cand or {}).get('text',''),80)}'")
+                except Exception:
+                    pass
+        elif sid_span:
+            cand["_target_sid"] = None
+            cand["_target_sid_span"] = tuple(sid_span)
+            mapped += 1
+            if diag_enabled():
+                try:
+                    diag_print(
+                        f"[SID_RESOLVE] seg={seg_id} cand_idx={j} sid={'-'} span={sid_span} preview='{preview((cand or {}).get('text',''),80)}'")
+                except Exception:
+                    pass
+        else:
+            cand["_target_sid"] = None
+            cand["_target_sid_span"] = None
+            unmapped += 1
+            if diag_enabled():
+                try:
+                    diag_print(
+                        f"[SID_RESOLVE_FAIL] seg={seg_id} cand_idx={j} reason=no-match window=({ls},{le})")
+                except Exception:
+                    pass
+    return mapped, unmapped
+
+
 def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=None, logger=None):
     """
     Insert or replace lines with priority:
@@ -501,6 +773,12 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
             if logger:
                 logger(
                     f"[REINJ_LINE] pos={pos} speaker={o.get('character','?')} text={o.get('text','')[:60]}")
+            if diag_enabled():
+                try:
+                    diag_print(
+                        f"[REINJECT_APPLY] sent_id={'-'} at={pos} mode=replace")
+                except Exception:
+                    pass
             dialogues[pos:pos] = [o]
         return dialogues
 
@@ -549,6 +827,10 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
         )
         print(
             f"[REINJ_ANCHOR] approx_pos={approx_pos} anchor_pos={anchor_pos} reason={_reason}", flush=True)
+        if diag_enabled() and anchor_pos == len(dialogues):
+            _bump_tail_append()
+            diag_print(
+                f"[TAIL_APPEND] sent_id={'-'} chunk_idx={_DIAG_CTX.get('chunk_idx','-')} why={'coverage_failed' if _reason=='tail' else _reason}")
     except Exception:
         pass
 
@@ -626,6 +908,13 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
     before = len(dialogues)
     try:
         dialogues[insert_pos:insert_pos] = guarded
+        if diag_enabled():
+            for k, _cand in enumerate(guarded):
+                try:
+                    diag_print(
+                        f"[REINJECT_APPLY] sent_id={'-'} at={insert_pos + k} mode={'append_tail' if anchor_pos==len(dialogues) else 'insert'}")
+                except Exception:
+                    pass
     except Exception as e:
         import traceback
         try:

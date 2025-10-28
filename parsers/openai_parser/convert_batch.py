@@ -17,11 +17,16 @@ from .fallback_utils import (
     replace_or_insert_lines,
     filter_fallback_lines,
 )
+from .fallback_utils import _split_sentences as _fb_split_sents
+from .fallback_utils import _norm_for_compare_punct_neutral as _fb_norm_cmp
 from .fallback_utils import _sanitize_character
 from .openai_client import call_openai_safe, _save_debug_output
 from .validator import validate_and_fix
 from .utils_misc import _dedupe_chunk_boundaries, _build_sentence_to_pos_map, _simple_reinject_missing_as_narrator, _preclean_jsonl
+from .utils_misc import build_sentence_ledger
+from .chunker import _split_into_sentences_with_spans
 from utils.session_logger import log_to_session, log_exception
+from .diag import diag_enabled, diag_print, nsfw_marker_present, preview, approx_token_len
 from .emotion_utils import ensure_two_emotions
 from pathlib import Path as _P
 import json as _json
@@ -111,6 +116,14 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
     _diag_reinj_added_total: int = 0
     if not raw_text or not raw_text.strip():
         return RawParseResult(formatted_text="", dialogues=[], stats={}, ambiguities=[], warnings=warnings, errors=errors)
+    # Build canonical sentence ledger (optional; no behavior change)
+    ledger = None
+    try:
+        ledger = build_sentence_ledger(
+            raw_text, splitter=_split_into_sentences_with_spans)
+    except Exception as _le:
+        if diag_enabled():
+            diag_print(f"[LEDGER_BUILD_ERR] {type(_le).__name__}: {_le}")
 
     chunks = build_chunks(
         raw_text, max_tokens=parser.max_tokens_per_chunk, model=parser.model, overlap_sentences=2)
@@ -150,7 +163,19 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
 
     import json  # local to avoid altering module imports
 
+    # For duplicate/relocation diagnostics across chapter-run
+    _seen_sent_ids: dict[str, tuple[int, int]] = {}
+
+    # Running character cursor for chapter offsets (best-effort)
+    # Prefer absolute offsets if available on Chunk; else use prefix sum of actual raw_text slices.
+    char_cursor = 0
     for idx, ch in enumerate(chunks):
+        # Set diag context for this chunk
+        try:
+            from .fallback_utils import _set_diag_context as _fb_set_ctx
+            _fb_set_ctx(chunk_idx=idx)
+        except Exception:
+            pass
         if idx == len(chunks) - 1:
             print(
                 "\n===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT BEGIN =====", flush=True)
@@ -161,6 +186,23 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
             print(
                 "===== [EOD][CHUNK_TEXT] LAST CHUNK INPUT END =====\n", flush=True)
         summary = _state_summary(state)
+        # Determine chunk start absolute char offset
+        try:
+            # Prefer a direct attribute if provided by chunker
+            if hasattr(ch, "start_char"):
+                chunk_start_char = int(getattr(ch, "start_char"))
+            elif hasattr(ch, "abs_offset"):
+                chunk_start_char = int(getattr(ch, "abs_offset"))
+            else:
+                chunk_start_char = int(char_cursor)
+        except Exception:
+            chunk_start_char = int(char_cursor)
+        if diag_enabled():
+            try:
+                diag_print(
+                    f"[CH_OFFSET] chunk_idx={idx} start_char={chunk_start_char}")
+            except Exception:
+                pass
         system_prompt = build_system_prompt(parser.allowed_emotions, list(
             state.known_characters), parser.include_narration, summary)
         user_prompt = build_user_prompt(ch.text, None)
@@ -283,8 +325,14 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                 pass
 
         try:
-            problem_segments = detect_missing_or_rejected_lines(
-                ch.text, fixed)
+            # Pass ledger optionally (internal helper accepts extra arg; behavior unchanged if ignored)
+            try:
+                problem_segments = detect_missing_or_rejected_lines(
+                    ch.text, fixed, ledger=ledger, chapter_char_offset=chunk_start_char)
+            except TypeError:
+                # older signature without ledger
+                problem_segments = detect_missing_or_rejected_lines(
+                    ch.text, fixed)
             print(
                 f"[DEBUG] Fallback detection: {len(problem_segments)} segment(s) found", flush=True)
             if idx == len(chunks) - 1:
@@ -444,6 +492,48 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                         f"[DEBUG] Fallback parsed {len(fb_lines)} line(s)", flush=True)
                     fb_valid, warnings = validate_and_fix(
                         fb_lines, warnings, state, kb=parser.kb, allowed_emotions=parser.allowed_emotions, memory=parser.memory)
+                    # Resolve SIDs for Friendli candidates using segment's ledger window if present
+                    mapped_count = 0
+                    unmapped_count = 0
+                    try:
+                        if ledger and isinstance(ledger, list):
+                            from .fallback_utils import _resolve_candidate_sid as _sid_resolve
+                            ls = seg.get("ledger_start_idx")
+                            le = seg.get("ledger_end_idx")
+                            for j, _cand in enumerate(fb_valid):
+                                sid, sid_span = _sid_resolve((_cand or {}).get(
+                                    "text", ""), ledger, ls if ls is not None else 0, le if le is not None else max(0, len(ledger)-1))
+                                if sid:
+                                    _cand["_target_sid"] = sid
+                                    _cand["_target_sid_span"] = None
+                                    mapped_count += 1
+                                elif sid_span:
+                                    _cand["_target_sid"] = None
+                                    _cand["_target_sid_span"] = tuple(sid_span)
+                                    mapped_count += 1
+                                else:
+                                    _cand["_target_sid"] = None
+                                    _cand["_target_sid_span"] = None
+                                    unmapped_count += 1
+                                if diag_enabled():
+                                    try:
+                                        if sid or sid_span:
+                                            diag_print(
+                                                f"[SID_RESOLVE] seg={seg.get('kind','seg')}:{seg.get('start_idx',0)}-{seg.get('end_idx',0)} cand_idx={j} sid={sid or '-'} span={sid_span or '-'} preview='{preview((_cand or {}).get('text',''),80)}'")
+                                        else:
+                                            diag_print(
+                                                f"[SID_RESOLVE_FAIL] seg={seg.get('kind','seg')}:{seg.get('start_idx',0)}-{seg.get('end_idx',0)} cand_idx={j} reason=no-match window=({ls},{le})")
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        mapped_count = mapped_count
+                        unmapped_count = unmapped_count
+                    if diag_enabled():
+                        try:
+                            diag_print(
+                                f"[SID_MAP_SUMMARY] chunk_idx={idx} mapped={mapped_count} unmapped={unmapped_count}")
+                        except Exception:
+                            pass
                     try:
                         approx = seg.get("_approx_indices") or []
                         if approx and fb_valid:
@@ -665,8 +755,42 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                         continue
             else:
                 print("[DEBUG] No fallback needed for this chunk", flush=True)
+        # F. Duplicate / relocation detection (diagnostic-only)
+        try:
+            sent_infos = _fb_split_sents(ch.text)
+            # map normalized sentence text → sent_id for this chunk
+            _sent_norm_to_id = {si.get("norm"): si.get(
+                "sent_id") for si in sent_infos if si.get("norm")}
+            for out_i, d in enumerate(fixed):
+                norm_out = _fb_norm_cmp(d.get("text", ""))
+                sid = _sent_norm_to_id.get(norm_out)
+                if not sid:
+                    continue
+                if sid in _seen_sent_ids:
+                    first_chunk, first_idx = _seen_sent_ids[sid]
+                    # same sentence appears again
+                    try:
+                        src = (d.get("_src") or "ai")
+                        diag_print(
+                            f"[DUP_XLOC] sent_id={sid} first_at={first_idx} again_at={out_i} source={src}")
+                        if first_chunk != idx:
+                            diag_print(
+                                f"[CROSS_CHUNK_MOVE] sent_id={sid} from_chunk={first_chunk} to_chunk={idx} reason=reinjection")
+                    except Exception:
+                        pass
+                else:
+                    _seen_sent_ids[sid] = (idx, out_i)
+        except Exception:
+            pass
+
         per_chunk_dialogues.append(list(fixed))
         all_dialogues.extend(fixed)
+        # advance char cursor by chunk text length if no absolute offset provided
+        try:
+            if not hasattr(ch, "start_char") and not hasattr(ch, "abs_offset"):
+                char_cursor += len(ch.text or "")
+        except Exception:
+            pass
 
     try:
         merged_parsed_lines = _dedupe_chunk_boundaries(per_chunk_dialogues)
@@ -894,6 +1018,43 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
     except Exception:
         pass
 
+    # [CHUNK_SUMMARY] emit summary per chunk before final write (using diagnostics context)
+    try:
+        from .fallback_utils import _get_tail_appends as _fb_get_tail
+        for i, chunk_lines in enumerate(per_chunk_dialogues):
+            if not diag_enabled():
+                break
+            src_counts = {"openai": 0, "friendli": 0,
+                          "fallback": 0, "duplicates": 0}
+            seen_ids = set()
+            for d in chunk_lines:
+                src = str(d.get("_src") or "ai")
+                if src == "ai":
+                    src_counts["openai"] += 1
+                elif src == "fb":
+                    src_counts["friendli"] += 1
+                elif src == "reinj":
+                    src_counts["fallback"] += 1
+                # light duplicate counter by normalized text
+                nid = (d.get("character", "").strip().lower(),
+                       (d.get("text", "") or "").strip().lower())
+                if nid in seen_ids:
+                    src_counts["duplicates"] += 1
+                else:
+                    seen_ids.add(nid)
+            tail_n = _fb_get_tail(i)
+            diag_print(
+                f"[CHUNK_SUMMARY] chunk_idx={i} lines={len(chunk_lines)} openai={src_counts['openai']} friendli={src_counts['friendli']} fallback={src_counts['fallback']} duplicates={src_counts['duplicates']} tail_appends={tail_n}"
+            )
+    except Exception:
+        pass
+
+    if ledger is not None and diag_enabled():
+        try:
+            diag_print(f"[LEDGER_SUMMARY] count={len(ledger)}")
+        except Exception:
+            pass
+
     stats = {
         "quotes_found": len(reconciled),
         "lines_emitted": len(formatted_lines),
@@ -951,3 +1112,21 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
         except Exception:
             pass
     return RawParseResult("\n".join(formatted_lines), reconciled, stats, ambiguities, warnings, errors)
+
+
+if __name__ == "__main__":
+    import os as _os
+    if (_os.getenv("DEBUG_PARSER_DIAG") or "0").lower() in {"1", "true", "yes", "on"}:
+        sample_text = (
+            '"I can help you," she said. '
+            '\nHe looked away, unsure.'
+            '\n"…?" Aleksandr murmured'
+            '\nShe gasped as his hands cupped her breasts.'
+        )
+        from .openai_parser import OpenAIParser as _Parser
+        p = _Parser()
+        try:
+            res = p.convert(sample_text)
+            print("[HARNESS] done. see diagnostics above.")
+        except Exception as e:
+            print(f"[HARNESS_ERR] {e}")

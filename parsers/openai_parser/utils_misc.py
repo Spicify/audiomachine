@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Callable, Tuple, Optional, TypedDict
 import re
 import difflib
+import hashlib
 
 from difflib import SequenceMatcher as _SM
 from utils.text_normalizer import normalize_text as _norm_for_compare
@@ -286,3 +287,81 @@ def _preclean_jsonl(raw: str) -> str:
     except Exception:
         pass
     return txt
+
+
+# ===== Ledger helpers (diagnostic/optional only) =====
+
+class SentenceInfo(TypedDict):
+    sid: str
+    idx: int
+    text: str
+    start_char: int
+    end_char: int
+    is_quote: int
+
+
+def normalize_for_sid(text: str) -> str:
+    """Canonical normalizer for sentence IDs.
+
+    - Trim whitespace; lowercase
+    - Normalize quotes/apostrophes
+    - Normalize ellipses: both '...' and '…' → a canonical '…'
+    - Collapse spaces
+    - Strip surrounding quotes
+    Layered on top of the shared normalizer to avoid drift.
+    """
+    s = (text or "")
+    try:
+        s = _norm_for_compare(s)
+    except Exception:
+        s = (text or "")
+    s = s.replace("\u201C", '"').replace("\u201D", '"')
+    s = s.replace("\u2018", "'").replace("\u2019", "'")
+    # normalize ellipses to single …
+    s = s.replace("...", "…").replace("\u2026", "…")
+    # collapse whitespace
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    # strip surrounding quotes if present
+    if (len(s) >= 2) and ((s[0] in '"\'\u201C\u2018') and (s[-1] in '"\'\u201D\u2019')):
+        s = s[1:-1].strip()
+    return s
+
+
+def build_sentence_ledger(raw_text: str, splitter: Callable[[str], List[Tuple[str, int, int]]]) -> List[SentenceInfo]:
+    """Build a canonical, ordered ledger of sentences for a chapter.
+
+    splitter must produce the same segmentation as chunker (text, start, end).
+    """
+    from parsers.openai_parser.diag import diag_enabled, diag_print  # local import to avoid cycles
+
+    spans = splitter(raw_text or "") if callable(splitter) else []
+    ledger: List[SentenceInfo] = []
+    for i, (txt, s, e) in enumerate(spans):
+        norm = normalize_for_sid(txt)
+        sid = hashlib.sha1(norm.encode("utf-8", "ignore")).hexdigest()[:10]
+        t = (txt or "")
+        # quick quote heuristic: starts with quote or contains matched quotes
+        starts_quote = 1 if (t.startswith(
+            '"') or t.startswith("\u201C")) else 0
+        has_balanced = 1 if ((t.count('"') % 2 == 0 and t.count('"') >= 2) or (
+            t.count("\u201C") and t.count("\u201D"))) else 0
+        is_quote = 1 if (starts_quote or has_balanced) else 0
+        ledger.append({
+            "sid": sid,
+            "idx": i,
+            "text": txt,
+            "start_char": int(s),
+            "end_char": int(e),
+            "is_quote": is_quote,
+        })
+
+    if diag_enabled():
+        try:
+            diag_print(f"[LEDGER_BUILD] sentences={len(ledger)}")
+            for it in (ledger[:5] + (ledger[-3:] if len(ledger) > 8 else [])):
+                prev = (it.get("text", "") or "").replace("\n", " ")[:80]
+                diag_print(
+                    f"[LEDGER_SID] idx={it['idx']} sid={it['sid']} is_quote={it['is_quote']} preview=\"{prev}\"")
+        except Exception:
+            pass
+    return ledger

@@ -41,6 +41,7 @@ from .fallback_utils import _sanitize_character
 from utils.text_normalizer import normalize_text as _norm_for_compare
 from utils.log_instrumentation import log_timed_action
 from utils.session_logger import log_to_session, log_exception
+from .diag import diag_enabled, diag_print
 
 # Diagnostics only; do not change behavior
 DEBUG_PARSER_DIAG = True  # diagnostics only; leave True for this run
