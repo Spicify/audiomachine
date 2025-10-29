@@ -30,7 +30,17 @@ def _resolve_candidate_sid(candidate_text: str, ledger: list, start_idx: int, en
             continue
 
     # 2) adjacent concatenation (two-sentence merge)
-    glues = [" ", ", ", '" ', ' "']
+    # Include space, em-dash, comma, and conjunction 'and' per requirements
+    glues = [
+        " ",
+        "—",
+        " — ",
+        ", ",
+        ",",
+        " and ",
+        '" ',
+        ' "',
+    ]
     for i in range(lo, max(lo, hi)):
         try:
             a = _norm_sid((ledger[i] or {}).get("text", ""))
@@ -115,4 +125,11 @@ def annotate_candidates_with_sid(candidates: list, *, ledger: list | None, seg_o
                         f"[SID_RESOLVE_FAIL] seg={seg_id} cand_idx={j} reason=no-match window=({ls},{le})")
                 except Exception:
                     pass
+    # Per-chunk summary (diagnostic)
+    if diag_enabled():
+        try:
+            diag_print(
+                f"[SID_MAP_SUMMARY] chunk_idx={chunk_idx} mapped={mapped} unmapped={unmapped}")
+        except Exception:
+            pass
     return mapped, unmapped

@@ -60,8 +60,36 @@ def filter_fallback_lines(segment_text: str, candidate_lines: list[dict]) -> lis
                 reason = ""
 
                 if ch == "Narrator":
-                    if (cand and (cand in seg_norm or seg_norm.find(cand) >= 0)) or _tok_sim(cand, seg_norm) >= 0.30:
-                        keep, reason = True, "narr_contained_or_sim>=0.30"
+                    # Special handling for narration when the segment has no quotes
+                    if not quoted_in_seg:
+                        # compare against individual sentences (normalized)
+                        try:
+                            _rx = re.compile(r'(?<=[.!?])\s+')
+                            _sentences = [s for s in re.split(
+                                _rx, seg_text) if s and s.strip()]
+                        except Exception:
+                            _sentences = [seg_text]
+                        sent_norms = [_pnorm(s) for s in _sentences]
+                        tok_len = len((cand or "").split())
+                        contained = any(cand and (cand in sn or sn.find(
+                            cand) >= 0) for sn in sent_norms)
+                        sim_max = 0.0
+                        for sn in sent_norms:
+                            try:
+                                sim_max = max(sim_max, _tok_sim(cand, sn))
+                            except Exception:
+                                continue
+                        thr = 0.25 if tok_len <= 12 else 0.30
+                        if contained or sim_max >= thr:
+                            keep = True
+                            # mark lenient reason only when threshold lowered was decisive
+                            if not contained and tok_len <= 12 and sim_max >= 0.25 and sim_max < 0.30:
+                                reason = "narr_contained_or_sim>=0.30 (lenient)"
+                            else:
+                                reason = "narr_contained_or_sim>=0.30"
+                    else:
+                        if (cand and (cand in seg_norm or seg_norm.find(cand) >= 0)) or _tok_sim(cand, seg_norm) >= 0.30:
+                            keep, reason = True, "narr_contained_or_sim>=0.30"
                 else:
                     if quoted_in_seg:
                         if cand in quoted_in_seg or any(_tok_sim(cand, q) >= 0.50 for q in quoted_in_seg):

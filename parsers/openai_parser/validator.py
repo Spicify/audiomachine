@@ -1,11 +1,55 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 from pydantic import ValidationError
+import re
 
 from .core_types import DialogueLine, ParserState
 from .emotion_utils import ensure_two_emotions, canonicalize_emotion
 from utils.mode import get_emotions_mode
 from .diag import diag_enabled, diag_print
+
+_RX_QUOTE = re.compile(r'["“”‘’\']')
+_RX_THIRD_PRON = re.compile(r'\b(he|she|they|his|her|their|him|them)\b', re.I)
+_RX_END_PUNCT = re.compile(r'[.!?]\s*$')
+
+
+def _no_quotes(s: str) -> bool:
+    try:
+        return not bool(_RX_QUOTE.search(s or ""))
+    except Exception:
+        return True
+
+
+def _looks_like_narration(s: str, state) -> bool:
+    """
+    Heuristic: treat as narration when there are no quotes AND at least one of:
+      - third-person pronouns present, OR
+      - mentions a known character name (TitleCase) in text, OR
+      - short declarative/fragments ending with punctuation ('.' or '!') but not a '?'
+    Avoid flipping 1st-person lines (' I ') to Narrator.
+    """
+    try:
+        t = (s or "").strip()
+        if not t:
+            return False
+        # avoid first-person monologue being forced to Narrator
+        if re.search(r'\bI\b', t):
+            return False
+        if _RX_THIRD_PRON.search(t):
+            return True
+        # known character mention
+        try:
+            for nm in getattr(state, "known_characters", []) or []:
+                if nm and nm in t:
+                    return True
+        except Exception:
+            pass
+        # bare declaratives like "So perfect." or "It felt so good."
+        if _RX_END_PUNCT.search(t) and "?" not in t:
+            return True
+        return False
+    except Exception:
+        return False
 
 
 def validate_and_fix(
@@ -115,6 +159,18 @@ def validate_and_fix(
                             f"[AMBIG_QUOTE_TAIL] tail={' '.join(tail_tokens)}")
                     except Exception:
                         pass
+
+        # Coerce obvious narration: Ambiguous → Narrator (no quotes, looks like narration)
+        if (fixed.get("character") == "Ambiguous") and _no_quotes(txt) and _looks_like_narration(txt, state):
+            try:
+                fixed["character"] = "Narrator"
+                if "candidates" in fixed:
+                    fixed.pop("candidates", None)
+                if diag_enabled():
+                    diag_print(
+                        f"[AMBIG_NARR_COERCE] reason=narration_no_quotes text='{(txt[:60] + '…') if len(txt) > 60 else txt}'")
+            except Exception:
+                pass
 
         try:
             DialogueLine(**fixed)

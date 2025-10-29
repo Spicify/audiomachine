@@ -854,6 +854,48 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                        for d in reconciled]
             present_set = {p for p in present if p}
 
+            # Prefer SID-based coverage when ledger is available
+            present_sid_set: Set[str] = set()
+            try:
+                present_sid_set = {str(d.get("_sid")).strip()
+                                   for d in reconciled if d.get("_sid")}
+            except Exception:
+                present_sid_set = set()
+            try:
+                # include those anchored during fallback reinjection
+                present_sid_set |= set(seen_sids)
+            except Exception:
+                pass
+
+            lnorm_to_sid: Dict[str, str] = {}
+            if ledger is not None:
+                try:
+                    from .utils_misc import normalize_for_sid as _norm_sid
+                    for entry in (ledger or []):
+                        try:
+                            t = _norm_sid((entry or {}).get("text", ""))
+                            s = (entry or {}).get("sid")
+                            if t and s:
+                                lnorm_to_sid[t] = s
+                        except Exception:
+                            continue
+                except Exception:
+                    lnorm_to_sid = {}
+
+            # If OpenAI base produced nothing, or chunk was largely rejected, force reinject
+            try:
+                base_valid_total = sum(1 for d in reconciled if (
+                    d.get("_src") or "ai").strip() == "ai")
+            except Exception:
+                base_valid_total = 0
+            try:
+                rejected_total = sum(1 for d in reconciled if str(
+                    d.get("character", "")).upper() == "REJECTED")
+            except Exception:
+                rejected_total = 0
+            force_reinject_missing = (base_valid_total == 0) or (
+                rejected_total >= max(1, len(reconciled)) * 0.5)
+
         def _extract_quotes_local(s: str) -> List[str]:
             qs: List[str] = []
             try:
@@ -876,8 +918,43 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
             s_norm = si.get("norm", "")
             if not s_norm:
                 continue
-            covered = (s_norm in present_set) or any(
-                (s_norm in p or p in s_norm) for p in present_set)
+            tok_count = len((s_norm or "").split())
+            # SID coverage (preferred when resolvable)
+            covered = False
+            if ledger is not None:
+                try:
+                    from .utils_misc import normalize_for_sid as _norm_sid
+                    sid = lnorm_to_sid.get(
+                        _norm_sid(si.get("text", ""))) if 'lnorm_to_sid' in locals() else None
+                    if sid and sid in present_sid_set:
+                        covered = True
+                except Exception:
+                    covered = False
+            # Very short sentences: only exact normalized match (no sim)
+            if not covered and tok_count <= 3:
+                if s_norm in present_set:
+                    covered = True
+                    if diag_enabled():
+                        try:
+                            diag_print(
+                                f"[FINAL_COVERAGE] short_line exact-match covered: '{s_norm}'")
+                        except Exception:
+                            pass
+                else:
+                    if diag_enabled():
+                        try:
+                            diag_print(
+                                f"[FINAL_COVERAGE] short_line sim check disabled for: '{s_norm}'")
+                        except Exception:
+                            pass
+            # Short sentences: raise sim threshold to 0.70
+            if not covered and 4 <= tok_count <= 6:
+                covered = any((_token_similarity(s_norm, p) >= 0.70)
+                              for p in present_set)
+            # Longer sentences: default sim threshold 0.60
+            if not covered and tok_count > 6:
+                covered = any((_token_similarity(s_norm, p) >= 0.60)
+                              for p in present_set)
             if not covered and parser.REINJECT_STRICT:
                 quotes = _extract_quotes_local(si.get("text", ""))
                 if quotes and any(q in present_set for q in quotes):
@@ -912,8 +989,10 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                     f"    [REINJ_LINE] text='{(_txt or '')[:80]}'", flush=True)
         except Exception:
             pass
-        if (not parser.REINJECT_STRICT) or length >= 2 or avg_tokens <= 12:
-            if parser.REINJECT_STRICT and length < 2 and avg_tokens <= 12:
+        effective_strict = bool(
+            parser.REINJECT_STRICT and not force_reinject_missing)
+        if (not effective_strict) or length >= 2 or avg_tokens <= 12:
+            if effective_strict and length < 2 and avg_tokens <= 12:
                 try:
                     print(
                         f"[DIAG][REINJECT] single-line reinjection enabled (avg_tokens={avg_tokens:.1f}) span=[{a}:{b}]", flush=True)

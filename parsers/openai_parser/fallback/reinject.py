@@ -165,12 +165,18 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
                 emitted_idx_by_sid[anchor_sid] = target_index
             if diag_enabled():
                 try:
+                    # include segment ledger window if available
+                    ls = seg_obj.get("ledger_start_idx") if isinstance(
+                        seg_obj, dict) else None
+                    le = seg_obj.get("ledger_end_idx") if isinstance(
+                        seg_obj, dict) else None
+                    window_str = f"({ls},{le})"
                     if tgt_sid:
                         diag_print(
-                            f"[SID_INSERT] sid={tgt_sid} at={target_index} anchor={anchor_label}")
+                            f"[SID_INSERT] sid={tgt_sid} at={target_index} anchor={anchor_label} window={window_str}")
                     elif tgt_span:
                         diag_print(
-                            f"[SID_INSERT] span={tgt_span} at={target_index} anchor={anchor_label}")
+                            f"[SID_INSERT] span={tgt_span} at={target_index} anchor={anchor_label} window={window_str}")
                 except Exception:
                     pass
         except Exception:
