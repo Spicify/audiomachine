@@ -31,13 +31,13 @@ from .chunker import build_chunks, deduplicate_lines, deduplicate_lines_exact
 from .chunker import diag_consume_dedup_conflicts
 from .emotion_utils import EmotionMemory, build_emotion_kb, ensure_two_emotions, get_allowed_emotions
 from .prompt_builder import build_system_prompt, build_user_prompt
-from .fallback_utils import (
+from .fallback import (
     detect_missing_or_rejected_lines,
     call_frendli_fallback,
     replace_or_insert_lines,
     filter_fallback_lines,
 )
-from .fallback_utils import _sanitize_character
+from .fallback.parsing import _sanitize_character
 from utils.text_normalizer import normalize_text as _norm_for_compare
 from utils.log_instrumentation import log_timed_action
 from utils.session_logger import log_to_session, log_exception

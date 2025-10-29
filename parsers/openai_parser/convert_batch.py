@@ -11,15 +11,15 @@ import re as _re
 from .core_types import RawParseResult, ParserState, DualLogger, _hash_key, _token_similarity, _attr_counts
 from .prompt_builder import build_system_prompt, build_user_prompt
 from .chunker import build_chunks, deduplicate_lines, deduplicate_lines_exact, diag_consume_dedup_conflicts
-from .fallback_utils import (
+from .fallback import (
     detect_missing_or_rejected_lines,
     call_frendli_fallback,
     replace_or_insert_lines,
     filter_fallback_lines,
 )
-from .fallback_utils import _split_sentences as _fb_split_sents
-from .fallback_utils import _norm_for_compare_punct_neutral as _fb_norm_cmp
-from .fallback_utils import _sanitize_character
+from .fallback.detection import _split_sentences as _fb_split_sents
+from .fallback.textnorm import _norm_for_compare_punct_neutral as _fb_norm_cmp
+from .fallback.parsing import _sanitize_character
 from .openai_client import call_openai_safe, _save_debug_output
 from .validator import validate_and_fix
 from .utils_misc import _dedupe_chunk_boundaries, _build_sentence_to_pos_map, _simple_reinject_missing_as_narrator, _preclean_jsonl
@@ -165,6 +165,9 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
 
     # For duplicate/relocation diagnostics across chapter-run
     _seen_sent_ids: dict[str, tuple[int, int]] = {}
+    # SID state across chapter
+    seen_sids: set[str] = set()
+    emitted_idx_by_sid: dict[str, int] = {}
 
     # Running character cursor for chapter offsets (best-effort)
     # Prefer absolute offsets if available on Chunk; else use prefix sum of actual raw_text slices.
@@ -172,7 +175,7 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
     for idx, ch in enumerate(chunks):
         # Set diag context for this chunk
         try:
-            from .fallback_utils import _set_diag_context as _fb_set_ctx
+            from .fallback.diag_ctx import _set_diag_context as _fb_set_ctx
             _fb_set_ctx(chunk_idx=idx)
         except Exception:
             pass
@@ -323,6 +326,34 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                 _ln.setdefault("_src", "ai")
             except Exception:
                 pass
+        # Tag emitted OpenAI lines with sid where possible using local ledger window
+        try:
+            if ledger and isinstance(ledger, list):
+                # compute quick window around this chunk using detection coverage or fallback: scan containment
+                from .utils_misc import normalize_for_sid as _norm_sid
+                lnorms = [_norm_sid((d or {}).get("text", "")) for d in ledger]
+                for di, _ln in enumerate(fixed):
+                    t = _norm_sid((_ln or {}).get("text", ""))
+                    if not t:
+                        continue
+                    try:
+                        si = -1
+                        for i, ln in enumerate(lnorms):
+                            if ln and (ln in t or t in ln):
+                                si = i
+                                break
+                        if si >= 0:
+                            sid = (ledger[si] or {}).get("sid")
+                            if sid:
+                                _ln.setdefault("_sid", sid)
+                                if sid not in seen_sids:
+                                    seen_sids.add(sid)
+                                    emitted_idx_by_sid[sid] = len(
+                                        per_chunk_dialogues[-1]) + di if per_chunk_dialogues else di
+                    except Exception:
+                        continue
+        except Exception:
+            pass
 
         try:
             # Pass ledger optionally (internal helper accepts extra arg; behavior unchanged if ignored)
@@ -366,7 +397,7 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                 if len(problem_segments) > 3:
                     print(
                         f"[WARN][FB] Excessive fallback segments ({len(problem_segments)}) — merging into a single consolidated fallback request.", flush=True)
-                    from .fallback_utils import _split_sentences as _fb_split
+                    from .fallback.detection import _split_sentences as _fb_split
                     combined_text = " ".join(
                         seg.get("text", "") for seg in problem_segments[:15])
                     approx_indices: list[int] = []
@@ -481,8 +512,12 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                                 f"[DIAG] Saved fallback RAW to {fpath}", flush=True)
                         except Exception:
                             pass
-                    fb_lines = _parse_jsonl(
-                        _preclean_jsonl(fb_raw))
+                    # Tolerant Friendli parsing
+                    try:
+                        from .fallback.parsing import _parse_friendli_output as _fr_parse
+                        fb_lines = _fr_parse(fb_raw)
+                    except Exception:
+                        fb_lines = _parse_jsonl(_preclean_jsonl(fb_raw))
                     try:
                         fb_lines = [_sanitize_character(
                             x, sorted(list(state.known_characters))) for x in fb_lines]
@@ -496,35 +531,10 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                     mapped_count = 0
                     unmapped_count = 0
                     try:
-                        if ledger and isinstance(ledger, list):
-                            from .fallback_utils import _resolve_candidate_sid as _sid_resolve
-                            ls = seg.get("ledger_start_idx")
-                            le = seg.get("ledger_end_idx")
-                            for j, _cand in enumerate(fb_valid):
-                                sid, sid_span = _sid_resolve((_cand or {}).get(
-                                    "text", ""), ledger, ls if ls is not None else 0, le if le is not None else max(0, len(ledger)-1))
-                                if sid:
-                                    _cand["_target_sid"] = sid
-                                    _cand["_target_sid_span"] = None
-                                    mapped_count += 1
-                                elif sid_span:
-                                    _cand["_target_sid"] = None
-                                    _cand["_target_sid_span"] = tuple(sid_span)
-                                    mapped_count += 1
-                                else:
-                                    _cand["_target_sid"] = None
-                                    _cand["_target_sid_span"] = None
-                                    unmapped_count += 1
-                                if diag_enabled():
-                                    try:
-                                        if sid or sid_span:
-                                            diag_print(
-                                                f"[SID_RESOLVE] seg={seg.get('kind','seg')}:{seg.get('start_idx',0)}-{seg.get('end_idx',0)} cand_idx={j} sid={sid or '-'} span={sid_span or '-'} preview='{preview((_cand or {}).get('text',''),80)}'")
-                                        else:
-                                            diag_print(
-                                                f"[SID_RESOLVE_FAIL] seg={seg.get('kind','seg')}:{seg.get('start_idx',0)}-{seg.get('end_idx',0)} cand_idx={j} reason=no-match window=({ls},{le})")
-                                    except Exception:
-                                        pass
+                        from .fallback.sid import annotate_candidates_with_sid as _annot_sid
+                        if isinstance(fb_valid, list):
+                            mapped_count, unmapped_count = _annot_sid(
+                                fb_valid, ledger=ledger, seg_obj=seg, chunk_idx=idx)
                     except Exception:
                         mapped_count = mapped_count
                         unmapped_count = unmapped_count
@@ -543,7 +553,7 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                     except Exception:
                         pass
                     segment_text = seg.get("text", "") or ""
-                    from .fallback_utils import filter_fallback_lines as _fb_filter
+                    from .fallback import filter_fallback_lines as _fb_filter
                     fb_valid = _fb_filter(segment_text, fb_valid)
                     print(
                         f"[EOD][FB_SUMMARY] After fuzzy filter: kept={len(fb_valid)}", flush=True)
@@ -556,7 +566,7 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                         sent_to_pos = _build_sentence_to_pos_map(
                             ch.text, fixed)
                         try:
-                            from .fallback_utils import _split_sentences as _dbg_split
+                            from .fallback.detection import _split_sentences as _dbg_split
                             sents = _dbg_split(ch.text)
                             mapped = len(sent_to_pos)
                             total = len(sents)
@@ -650,6 +660,11 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                             start_index=_approx_pos,
                             end_index=_approx_pos,
                             logger=logger,
+                            ledger=ledger,
+                            seg_obj=seg,
+                            seen_sids=seen_sids,
+                            emitted_idx_by_sid=emitted_idx_by_sid,
+                            chunk_idx=idx,
                         )
                     if is_last_chunk:
                         print(
@@ -832,7 +847,7 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
             reconciled = _simple_reinject_missing_as_narrator(
                 full_text, reconciled)
         else:
-            from .fallback_utils import _split_sentences as _split_sents
+            from .fallback.detection import _split_sentences as _split_sents
             sent_infos: List[Dict[str, Any]] = _split_sents(raw_text)
 
             present = [_norm_for_compare(d.get("text", ""))
@@ -1020,7 +1035,7 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
 
     # [CHUNK_SUMMARY] emit summary per chunk before final write (using diagnostics context)
     try:
-        from .fallback_utils import _get_tail_appends as _fb_get_tail
+        from .fallback.diag_ctx import _get_tail_appends as _fb_get_tail
         for i, chunk_lines in enumerate(per_chunk_dialogues):
             if not diag_enabled():
                 break

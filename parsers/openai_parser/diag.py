@@ -48,3 +48,4 @@ def approx_token_len(s: str) -> int:
         return 0
     # Heuristic: ~4 chars per token
     return max(1, len(s) // 4)
+

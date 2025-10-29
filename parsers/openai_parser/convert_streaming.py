@@ -10,12 +10,12 @@ import hashlib
 from .core_types import ParserState, DualLogger, RawParseResult, _hash_key, _token_similarity
 from .prompt_builder import build_system_prompt, build_user_prompt
 from .chunker import build_chunks
-from .fallback_utils import (
+from .fallback import (
     detect_missing_or_rejected_lines,
     call_frendli_fallback,
     replace_or_insert_lines,
 )
-from .fallback_utils import _sanitize_character
+from .fallback.parsing import _sanitize_character
 from .openai_client import call_openai_safe, _save_debug_output
 from .validator import validate_and_fix
 from .utils_misc import _simple_reinject_missing_as_narrator, _build_sentence_to_pos_map, _preclean_jsonl
@@ -399,7 +399,7 @@ def convert_stream(parser, raw_text: str) -> Iterator[Dict]:
                         except Exception:
                             pass
                         segment_text = seg.get("text", "") or ""
-                        from .fallback_utils import filter_fallback_lines as _fb_filter
+                        from .fallback import filter_fallback_lines as _fb_filter
                         fb_valid = _fb_filter(segment_text, fb_valid)
                         print(
                             f"[EOD][FB_SUMMARY] After fuzzy filter: kept={len(fb_valid)}", flush=True)
@@ -533,7 +533,7 @@ def convert_stream(parser, raw_text: str) -> Iterator[Dict]:
                     filtered = _simple_reinject_missing_as_narrator(
                         ch.text, filtered)
                 else:
-                    from .fallback_utils import _split_sentences as _split_sents
+                    from .fallback.detection import _split_sentences as _split_sents
                     sent_infos = _split_sents(ch.text)
                     present = {_norm_for_compare(
                         d.get("text", "")) for d in filtered}
