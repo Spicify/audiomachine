@@ -87,7 +87,7 @@ def call_frendli_fallback(system_prompt: str, user_prompt: str, known_characters
     print("[DEBUG] Frendli request begin", flush=True)
     try:
         response = client.chat.completions.create(
-            model="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+            model="Qwen/Qwen3-235B-A22B-Thinking-2507",
             messages=[
                 {"role": "system", "content": strict_system_prompt},
                 {"role": "user", "content": user_prompt},

@@ -62,6 +62,8 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines, *, ledger: list |
         norm_sent = si["norm"]
         if not norm_sent:
             continue
+        # Initialize similarity to 1.0 (will be updated if not covered)
+        si["sim"] = 1.0
         # Baseline coverage by containment (neutral)
         covered = any(
             norm_sent in pt or pt in norm_sent for pt in parsed_norm_texts if pt)
@@ -96,6 +98,15 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines, *, ledger: list |
                     covered = True
                     reason = f"fuzzy"
                     break
+            # Store similarity for anchoring correction
+            if not covered:
+                best_sim = 0.0
+                for pt in parsed_norm_texts:
+                    if not pt:
+                        continue
+                    best_sim = max(best_sim, _token_similarity(norm_sent, pt))
+                si["sim"] = best_sim
+            # else: sim already initialized to 1.0 at start
             if not covered:
                 try:
                     print(
@@ -129,6 +140,24 @@ def detect_missing_or_rejected_lines(chunk_text, parsed_lines, *, ledger: list |
             "text": joined_text,
             "kind": "missing",
         }
+        # Adjust start index when entire chunk was incorrectly marked missing
+        if seg.get("kind") == "missing" and start_idx == 0 and len(parsed_lines) > 5:
+            try:
+                # Find first unmatched sentence with lowest similarity from coverage map
+                lowest_sim = 1.0
+                best_idx = 0
+                for i, si in enumerate(sent_infos):
+                    sim = si.get("sim", 1.0)
+                    if sim < 0.6 and sim < lowest_sim:
+                        lowest_sim = sim
+                        best_idx = i
+                if best_idx > 0:
+                    start_idx = best_idx
+                    seg["start_idx"] = start_idx
+                    if diag_enabled():
+                        diag_print(f"[ANCHOR_FIX] corrected start_idx={start_idx} (prev=0, sim={lowest_sim:.2f})")
+            except Exception:
+                pass
         missing_segments.append(seg)
         if diag_enabled():
             try:

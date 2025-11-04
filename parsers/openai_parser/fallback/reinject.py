@@ -389,12 +389,26 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
 
     before = len(dialogues)
     try:
-        dialogues[insert_pos:insert_pos] = guarded
-        if diag_enabled():
-            for k, _cand in enumerate(guarded):
+        # Prefer in-place insert when we have a valid anchor; append only when no valid anchor
+        if insert_pos is not None and 0 <= insert_pos <= len(dialogues):
+            dialogues[insert_pos:insert_pos] = guarded
+            if diag_enabled():
                 try:
-                    diag_print(
-                        f"[REINJECT_APPLY] sent_id={'-'} at={insert_pos + k} mode={'append_tail' if anchor_pos==len(dialogues) else 'insert'}")
+                    diag_print(f"[REINJECT_ORDER] inserted at {insert_pos} len={len(guarded)}")
+                except Exception:
+                    pass
+            if diag_enabled():
+                for k, _cand in enumerate(guarded):
+                    try:
+                        diag_print(
+                            f"[REINJECT_APPLY] sent_id={'-'} at={insert_pos + k} mode={'append_tail' if anchor_pos==len(dialogues) else 'insert'}")
+                    except Exception:
+                        pass
+        else:
+            dialogues.extend(guarded)
+            if diag_enabled():
+                try:
+                    diag_print(f"[TAIL_APPEND] applied len={len(guarded)} (no valid anchor)")
                 except Exception:
                     pass
     except Exception as e:

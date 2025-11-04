@@ -145,11 +145,50 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
         lines = [ln.strip() for ln in raw_output.split("\n") if ln.strip()]
         objs: List[Dict[str, Any]] = []
         for ln in lines:
+            # Skip AI refusal or moderation disclaimer lines (early)
+            if isinstance(ln, str):
+                lower_line = ln.lower()
+                if any(
+                    phrase in lower_line
+                    for phrase in [
+                        "i'm sorry",
+                        "i can't assist",
+                        "i cannot assist",
+                        "as an ai",
+                        "violates policy",
+                        "explicit sexual content",
+                        "involving familial",
+                        "provide a non-sexual excerpt",
+                    ]
+                ):
+                    if diag_enabled():
+                        from .diag import diag_print
+                        diag_print(f"[EARLY_SKIP_REFUSAL] text='{lower_line[:80]}...'")
+                    continue
             if not (ln.startswith("{") and ln.endswith("}")):
                 continue
             try:
                 obj = json.loads(ln)
                 if isinstance(obj, dict):
+                    # Also check parsed text field for refusal phrases
+                    text_field = str((obj.get("text") or "")).lower()
+                    if any(
+                        phrase in text_field
+                        for phrase in [
+                            "i'm sorry",
+                            "i can't assist",
+                            "i cannot assist",
+                            "as an ai",
+                            "violates policy",
+                            "explicit sexual content",
+                            "involving familial",
+                            "provide a non-sexual excerpt",
+                        ]
+                    ):
+                        if diag_enabled():
+                            from .diag import diag_print
+                            diag_print(f"[EARLY_SKIP_REFUSAL] text='{text_field[:80]}...'")
+                        continue
                     objs.append(obj)
             except Exception:
                 continue

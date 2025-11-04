@@ -113,16 +113,6 @@ def build_system_prompt(
         '{"character":"Narrator","emotions":["tender","intimate"],"text":"His lips were at her ear."}',
     ])
 
-    # REJECTED clause (unchanged)
-    lines.extend([
-        "",
-        # REJECTED: policy-only, never for uncertainty
-        "If and only if the platform’s safety policy prevents you from returning any text from a given sentence,",
-        "output exactly one JSON line:",
-        '{"character": "REJECTED", "emotions": ["soft","sad"], "text": "<REJECTED_LINE>"}',
-        "where <REJECTED_LINE> is the original sentence verbatim.",
-        "Do NOT use REJECTED for uncertainty, ambiguity, tricky attribution, formatting errors, or lack of confidence.",
-    ])
     return "\n".join(lines)
 
 

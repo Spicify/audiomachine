@@ -176,11 +176,48 @@ def _parse_friendli_output(text: str) -> list[dict]:
     try:
         for ln in (raw or "").splitlines():
             s = ln.strip()
+            # Skip AI refusal or moderation disclaimer lines (early)
+            if isinstance(s, str):
+                lower_line = s.lower()
+                if any(
+                    phrase in lower_line
+                    for phrase in [
+                        "i'm sorry",
+                        "i can't assist",
+                        "i cannot assist",
+                        "as an ai",
+                        "violates policy",
+                        "explicit sexual content",
+                        "involving familial",
+                        "provide a non-sexual excerpt",
+                    ]
+                ):
+                    if diag_enabled():
+                        diag_print(f"[EARLY_SKIP_REFUSAL] text='{lower_line[:80]}...'")
+                    continue
             if not (s.startswith("{") and s.endswith("}")):
                 continue
             try:
                 obj = _json.loads(s)
                 if isinstance(obj, dict):
+                    # Also check parsed text field for refusal phrases
+                    text_field = str((obj.get("text") or "")).lower()
+                    if any(
+                        phrase in text_field
+                        for phrase in [
+                            "i'm sorry",
+                            "i can't assist",
+                            "i cannot assist",
+                            "as an ai",
+                            "violates policy",
+                            "explicit sexual content",
+                            "involving familial",
+                            "provide a non-sexual excerpt",
+                        ]
+                    ):
+                        if diag_enabled():
+                            diag_print(f"[EARLY_SKIP_REFUSAL] text='{text_field[:80]}...'")
+                        continue
                     parsed.append(obj)
             except Exception:
                 continue
@@ -198,7 +235,29 @@ def _parse_friendli_output(text: str) -> list[dict]:
         if s.startswith("["):
             arr = _json.loads(s)
             if isinstance(arr, list):
-                parsed = [o for o in arr if isinstance(o, dict)]
+                parsed = []
+                for o in arr:
+                    if not isinstance(o, dict):
+                        continue
+                    # Skip AI refusal or moderation disclaimer lines (early)
+                    text_field = str((o.get("text") or "")).lower()
+                    if any(
+                        phrase in text_field
+                        for phrase in [
+                            "i'm sorry",
+                            "i can't assist",
+                            "i cannot assist",
+                            "as an ai",
+                            "violates policy",
+                            "explicit sexual content",
+                            "involving familial",
+                            "provide a non-sexual excerpt",
+                        ]
+                    ):
+                        if diag_enabled():
+                            diag_print(f"[EARLY_SKIP_REFUSAL] text='{text_field[:80]}...'")
+                        continue
+                    parsed.append(o)
                 if parsed:
                     if diag_enabled():
                         diag_print(
@@ -228,6 +287,24 @@ def _parse_friendli_output(text: str) -> list[dict]:
             try:
                 obj = _json.loads(s)
                 if isinstance(obj, dict):
+                    # Skip AI refusal or moderation disclaimer lines (early)
+                    text_field = str((obj.get("text") or "")).lower()
+                    if any(
+                        phrase in text_field
+                        for phrase in [
+                            "i'm sorry",
+                            "i can't assist",
+                            "i cannot assist",
+                            "as an ai",
+                            "violates policy",
+                            "explicit sexual content",
+                            "involving familial",
+                            "provide a non-sexual excerpt",
+                        ]
+                    ):
+                        if diag_enabled():
+                            diag_print(f"[EARLY_SKIP_REFUSAL] text='{text_field[:80]}...'")
+                        continue
                     parsed.append(obj)
             except Exception:
                 continue

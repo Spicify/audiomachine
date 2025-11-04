@@ -190,6 +190,26 @@ def validate_and_fix(
                 except Exception:
                     pass
 
+        # Skip AI refusal or policy disclaimer lines
+        refusal_text = str(it.get("text", "")).lower()
+        if any(
+            phrase in refusal_text
+            for phrase in [
+                "i'm sorry, i can’t assist",
+                "i can’t assist",
+                "as an ai language model",
+                "as an ai model",
+                "i cannot assist",
+                "explicit sexual content",
+                "involving familial",
+                "violates policy",
+                "i'm unable to help with that",
+            ]
+        ):
+            if diag_enabled():
+                diag_print(f"[VALIDATE_SKIP_REFUSAL] text='{refusal_text[:80]}...'")
+            continue
+
         base_valid += 1
         result.append(fixed)
 
