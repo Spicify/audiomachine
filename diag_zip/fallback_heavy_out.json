@@ -1,0 +1,169 @@
+{
+  "formatted_text": "[Narrator] (pleading)(vulnerable): Please, Daddy. Her voice trembled with need. He looked at her with dark, hungry eyes. Good girl. His hands moved lower, exploring her body. She gasped as his fingers found their target, pleasure coursing through her. More. She arched against him desperately. He smiled, a predatory expression that made her shiver.\n[Ambiguous] (aggressive)(rough): You want it so bad, don't you?\n[Narrator] (rough)(wanting): His voice was rough with desire. Yes. Her body responded to his touch. Then beg for it. His fingers were still working their magic.\n[Ambiguous] (pleading)(desperate): Please, please, I need you inside me.\n[Narrator] (sad)(desperate): She sobbed.\n[Narrator] : \"Please, Daddy,\"\n[Narrator] : \"Good girl,\"\n[Narrator] : \"More,\"\n[Narrator] : \"Yes,\"\n[Narrator] : \"Then beg for it,\"\n[Narrator] : \"Please,\"",
+  "dialogues": [
+    {
+      "character": "Narrator",
+      "text": "Please, Daddy. Her voice trembled with need. He looked at her with dark, hungry eyes. Good girl. His hands moved lower, exploring her body. She gasped as his fingers found their target, pleasure coursing through her. More. She arched against him desperately. He smiled, a predatory expression that made her shiver.",
+      "emotions": [
+        "pleading",
+        "vulnerable"
+      ],
+      "_src": "ai"
+    },
+    {
+      "character": "Ambiguous",
+      "text": "You want it so bad, don't you?",
+      "emotions": [
+        "aggressive",
+        "rough"
+      ],
+      "candidates": [
+        "Dad",
+        "Brad",
+        "Adam (Family)"
+      ],
+      "_src": "ai",
+      "_sid": "b0650b8e68"
+    },
+    {
+      "character": "Narrator",
+      "text": "His voice was rough with desire. Yes. Her body responded to his touch. Then beg for it. His fingers were still working their magic.",
+      "emotions": [
+        "rough",
+        "wanting"
+      ],
+      "_src": "ai"
+    },
+    {
+      "character": "Ambiguous",
+      "text": "Please, please, I need you inside me.",
+      "emotions": [
+        "pleading",
+        "desperate"
+      ],
+      "candidates": [
+        "Alexandra",
+        "Allison",
+        "Aria"
+      ],
+      "_src": "ai"
+    },
+    {
+      "character": "Narrator",
+      "text": "She sobbed.",
+      "emotions": [
+        "sad",
+        "desperate"
+      ],
+      "_src": "ai"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Please, Daddy,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Good girl,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"More,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Yes,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Then beg for it,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Please,\"",
+      "_src": "reinj"
+    }
+  ],
+  "stats": {
+    "quotes_found": 11,
+    "lines_emitted": 11,
+    "narration_blocks": 9
+  },
+  "warnings": [],
+  "errors": [],
+  "ambiguities": [
+    {
+      "id": "amb-1-8294514717523413321",
+      "text": "Please, Daddy.",
+      "candidates": [
+        "Alexandra",
+        "Allison",
+        "Aria"
+      ]
+    },
+    {
+      "id": "amb-1-4643215497926106776",
+      "text": "Good girl.",
+      "candidates": [
+        "Dad",
+        "Brad",
+        "Adam (Family)"
+      ]
+    },
+    {
+      "id": "amb-1-5969343579826587615",
+      "text": "More.",
+      "candidates": [
+        "Alexandra",
+        "Allison",
+        "Aria"
+      ]
+    },
+    {
+      "id": "amb-1-6136204192317443551",
+      "text": "You want it so bad, don't you?",
+      "candidates": [
+        "Dad",
+        "Brad",
+        "Adam (Family)"
+      ]
+    },
+    {
+      "id": "amb-1-7713136505257373379",
+      "text": "Yes.",
+      "candidates": [
+        "Alexandra",
+        "Allison",
+        "Aria"
+      ]
+    },
+    {
+      "id": "amb-1-7568771794538314063",
+      "text": "Then beg for it.",
+      "candidates": [
+        "Dad",
+        "Brad",
+        "Adam (Family)"
+      ]
+    },
+    {
+      "id": "amb-1-1415949282913313009",
+      "text": "Please, please, I need you inside me.",
+      "candidates": [
+        "Alexandra",
+        "Allison",
+        "Aria"
+      ]
+    }
+  ]
+}

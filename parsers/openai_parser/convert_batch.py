@@ -566,6 +566,13 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                         f"[DEBUG] Fallback parsed {len(fb_lines)} line(s)", flush=True)
                     fb_valid, warnings = validate_and_fix(
                         fb_lines, warnings, state, kb=parser.kb, allowed_emotions=parser.allowed_emotions, memory=parser.memory)
+                    # DIAG: Location A - After fb_valid = validate_and_fix(...)
+                    try:
+                        print("[DIAG_FB_VALID] chunk=%s seg=%s fb_valid=%s" %
+                              (idx, _seg_i, [(d.get('character'), d.get('emotions'),
+                               d.get('_span_start'), d.get('_sid')) for d in fb_valid]), flush=True)
+                    except Exception:
+                        pass
                     # Resolve SIDs for Friendli candidates using segment's ledger window if present
                     mapped_count = 0
                     unmapped_count = 0
@@ -577,6 +584,12 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                     except Exception:
                         mapped_count = mapped_count
                         unmapped_count = unmapped_count
+                    # DIAG: Location B - After mapped_count, unmapped_count = _annot_sid(...)
+                    try:
+                        print("[DIAG_SID_MAP] mapped=%d unmapped=%d sample_sids=%s" %
+                              (mapped_count, unmapped_count, [d.get('_sid') for d in fb_valid[:6]]), flush=True)
+                    except Exception:
+                        pass
                     if diag_enabled():
                         try:
                             diag_print(
@@ -631,6 +644,12 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                                     break
                         if pos is None:
                             pos = min(max(anchor_sent, 0), len(fixed))
+                        # DIAG: Location C - After choosing pos (the anchor position search)
+                        try:
+                            print("[DIAG_POS] anchor_sent=%s chosen_pos=%s sent_to_pos_keys_sample=%s" %
+                                  (seg.get('start_idx'), pos, sorted(list(sent_to_pos.keys()))[:10]), flush=True)
+                        except Exception:
+                            pass
                         for _ln in fb_valid:
                             if isinstance(_ln, dict) and "_span_start" not in _ln:
                                 _ln["_span_start"] = int(pos)
@@ -690,6 +709,12 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
                     try:
                         print(
                             f"[REINJ_DELTA] base_pos={_base_pos} approx_pos={_approx_pos} delta={0}", flush=True)
+                    except Exception:
+                        pass
+                    # DIAG: Location D - Before calling replace_or_insert_lines(...)
+                    try:
+                        print("[DIAG_REINJ_CALL] chunk=%s seg=%s base_pos=%s approx_pos=%s fixed_len=%d new_len=%d" %
+                              (idx, _seg_i, _base_pos, _approx_pos, len(fixed), len(fb_valid)), flush=True)
                     except Exception:
                         pass
                     if fb_valid:
@@ -867,6 +892,17 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
     for item in all_dialogues:
         if not parser.include_narration and str(item.get("character")).strip() == "Narrator":
             continue
+        # DIAG: Location E - Before merge check
+        try:
+            print("[DIAG_MERGE_CHECK] prev_char=%s next_char=%s prev_src=%s next_src=%s quote_start_prev=%s quote_start_curr=%s" %
+                  (reconciled[-1].get('character') if reconciled else None,
+                   item.get('character'),
+                   reconciled[-1].get('_src') if reconciled else None,
+                   item.get('_src'),
+                   (reconciled[-1].get('text') or '').strip().startswith(('"', "'")) if reconciled else False,
+                   (item.get('text') or '').strip().startswith(('"', "'"))), flush=True)
+        except Exception:
+            pass
         if reconciled and reconciled[-1]["character"] == item["character"]:
             reconciled[-1]["text"] = f"{reconciled[-1]['text']} {item['text']}".strip()
             merged_emotions = list(dict.fromkeys(
@@ -1124,6 +1160,12 @@ def convert_batch(parser, raw_text: str) -> RawParseResult:
             print("===== [EOD][TAIL] END =====\n", flush=True)
         except Exception:
             print("[EOD] <failed to print reconciled tail>", flush=True)
+        # DIAG: Location F - After [EOD][TAIL] block
+        try:
+            for i, d in enumerate(reconciled[-40:], start=max(1, len(reconciled)-39)):
+                print(f"[FINAL_TAIL] i={i} src={d.get('_src')} sid={d.get('_sid')} span={d.get('_span_start')} char={d.get('character')} text={d.get('text')[:60]}", flush=True)
+        except Exception:
+            pass
 
     try:
         before = len(reconciled)

@@ -1,0 +1,2 @@
+[DIAG_POS] anchor_sent=0 chosen_pos=0 sent_to_pos_keys_sample=[0]
+[DIAG_POS] anchor_sent=9 chosen_pos=4 sent_to_pos_keys_sample=[0, 3, 4, 6, 9, 10, 12, 14, 15, 17]

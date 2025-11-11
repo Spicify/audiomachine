@@ -1,0 +1,14 @@
+Parser Diagnostic Summary Counts
+==================================================
+
+narrator_calm_soft_fallback: 0
+sid_mapped_rate_pct: 64.3%
+sid_total_mapped: 9
+sid_total_unmapped: 5
+sid_total_attempted: 14
+reinj_append_calls: 0
+reinj_total_calls: 2
+cross_source_merges: 3
+total_merge_checks: 169
+unmapped_tail_entries: 103
+total_tail_entries: 129

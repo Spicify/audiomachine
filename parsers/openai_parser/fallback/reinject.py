@@ -50,6 +50,12 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
     3) Fuzzy content anchor near the guessed position.
     4) Final fallback: tail-append.
     """
+    # DIAG: At function start
+    try:
+        print("[DIAG_REPLACE_ENTER] start_index=%s end_index=%s new_lines_sample=%s" %
+              (start_index, end_index, [(n.get('character'), n.get('text')[:40], n.get('_span_start')) for n in (new_lines[:6] if isinstance(new_lines, list) else [])]), flush=True)
+    except Exception:
+        pass
     try:
         print(f"[REINJ_ARGS] new_lines_t={type(new_lines).__name__} new_len={len(new_lines) if isinstance(new_lines, list) else -1} start_t={type(start_index).__name__} end_t={type(end_index).__name__}", flush=True)
     except Exception:
@@ -433,6 +439,11 @@ def replace_or_insert_lines(dialogues, new_lines, start_index=None, end_index=No
                 pass
     try:
         print(f"[REINJ_OK] added={len(dialogues)-before}", flush=True)
+    except Exception:
+        pass
+    # DIAG: At function end (before return)
+    try:
+        print("[DIAG_REPLACE_EXIT] post_len=%d" % len(dialogues), flush=True)
     except Exception:
         pass
     return dialogues

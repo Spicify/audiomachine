@@ -1,0 +1,170 @@
+{
+  "formatted_text": "[Narrator] (pleading)(submissive): Please, Daddy. Good girl. She looked away. He smiled.\n[Ambiguous] (whispers)(curious): What do you want? I want you.\n[Narrator] (commanding)(firm): Say it again. Please. Louder.\n[Ambiguous] (whispers)(urgent): I want you!\n[Narrator] : \"Please, Daddy,\"\n[Narrator] : \"Good girl,\"\n[Narrator] : \"What do you want?\"\n[Narrator] : \"Say it again,\"\n[Narrator] : \"Please,\"\n[Narrator] : \"Louder,\"",
+  "dialogues": [
+    {
+      "character": "Narrator",
+      "text": "Please, Daddy. Good girl. She looked away. He smiled.",
+      "emotions": [
+        "pleading",
+        "submissive"
+      ],
+      "_src": "ai"
+    },
+    {
+      "character": "Ambiguous",
+      "text": "What do you want? I want you.",
+      "emotions": [
+        "whispers",
+        "curious"
+      ],
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Mikhail"
+      ],
+      "_src": "ai",
+      "_sid": "3f61ec4e8d"
+    },
+    {
+      "character": "Narrator",
+      "text": "Say it again. Please. Louder.",
+      "emotions": [
+        "commanding",
+        "firm"
+      ],
+      "_src": "ai"
+    },
+    {
+      "character": "Ambiguous",
+      "text": "I want you!",
+      "emotions": [
+        "whispers",
+        "urgent"
+      ],
+      "candidates": [
+        "Alexandra",
+        "Jenna",
+        "Eve"
+      ],
+      "_src": "ai",
+      "_sid": "a4b34af6c3"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Please, Daddy,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Good girl,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"What do you want?\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Say it again,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Please,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Louder,\"",
+      "_src": "reinj"
+    }
+  ],
+  "stats": {
+    "quotes_found": 10,
+    "lines_emitted": 10,
+    "narration_blocks": 8
+  },
+  "warnings": [],
+  "errors": [],
+  "ambiguities": [
+    {
+      "id": "amb-1-8294514717523413321",
+      "text": "Please, Daddy.",
+      "candidates": [
+        "Alexandra",
+        "Jenna",
+        "Eve"
+      ]
+    },
+    {
+      "id": "amb-1-4643215497926106776",
+      "text": "Good girl.",
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Mikhail"
+      ]
+    },
+    {
+      "id": "amb-1-1711564417004065816",
+      "text": "What do you want?",
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Mikhail"
+      ]
+    },
+    {
+      "id": "amb-1-8235955941014506800",
+      "text": "I want you.",
+      "candidates": [
+        "Alexandra",
+        "Jenna",
+        "Eve"
+      ]
+    },
+    {
+      "id": "amb-1-2961097101364985278",
+      "text": "Say it again.",
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Mikhail"
+      ]
+    },
+    {
+      "id": "amb-1-3585401015317116320",
+      "text": "Please.",
+      "candidates": [
+        "Alexandra",
+        "Jenna",
+        "Eve"
+      ]
+    },
+    {
+      "id": "amb-1-2260841518352698993",
+      "text": "Louder.",
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Mikhail"
+      ]
+    },
+    {
+      "id": "amb-1-7313640971557101245",
+      "text": "I want you!",
+      "candidates": [
+        "Alexandra",
+        "Jenna",
+        "Eve"
+      ]
+    }
+  ]
+}

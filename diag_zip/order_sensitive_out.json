@@ -1,0 +1,126 @@
+{
+  "formatted_text": "[Narrator] (calm)(serious): She entered the room. The door closed behind her with a soft click. He looked up from his desk. Hello. He set down his pen. She smiled, moving closer. The clock on the wall ticked steadily. Have a seat. He gestured to the chair. She sat down, smoothing her dress. He leaned back in his chair. Tell me what you need.\n[Narrator] : \"Hello,\"\n[Narrator] : he said, setting down his pen.\n[Narrator] : \"Have a seat,\"\n[Narrator] : \"Tell me what you need,\"\n[Narrator] : he said.",
+  "dialogues": [
+    {
+      "character": "Narrator",
+      "text": "She entered the room. The door closed behind her with a soft click. He looked up from his desk. Hello. He set down his pen. She smiled, moving closer. The clock on the wall ticked steadily. Have a seat. He gestured to the chair. She sat down, smoothing her dress. He leaned back in his chair. Tell me what you need.",
+      "emotions": [
+        "calm",
+        "serious"
+      ],
+      "_src": "ai",
+      "_sid": "b0262ad734"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Hello,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "he said, setting down his pen.",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Have a seat,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "\"Tell me what you need,\"",
+      "_src": "reinj"
+    },
+    {
+      "character": "Narrator",
+      "emotions": [],
+      "text": "he said.",
+      "_src": "reinj"
+    }
+  ],
+  "stats": {
+    "quotes_found": 6,
+    "lines_emitted": 6,
+    "narration_blocks": 6
+  },
+  "warnings": [],
+  "errors": [],
+  "ambiguities": [
+    {
+      "id": "amb-1-5902433714479006698",
+      "text": "She entered the room.",
+      "candidates": [
+        "Clara (Secondary)",
+        "Lydia",
+        "Jenna"
+      ]
+    },
+    {
+      "id": "amb-1-4072727821326152412",
+      "text": "He looked up from his desk.",
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Enzo"
+      ]
+    },
+    {
+      "id": "amb-1-3331587995521089107",
+      "text": "Hello.",
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Enzo"
+      ]
+    },
+    {
+      "id": "amb-1-3061781548487158751",
+      "text": "She smiled, moving closer.",
+      "candidates": [
+        "Clara (Secondary)",
+        "Lydia",
+        "Jenna"
+      ]
+    },
+    {
+      "id": "amb-1-7781574668003099285",
+      "text": "Have a seat.",
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Enzo"
+      ]
+    },
+    {
+      "id": "amb-1-4860743605441515670",
+      "text": "She sat down, smoothing her dress.",
+      "candidates": [
+        "Clara (Secondary)",
+        "Lydia",
+        "Jenna"
+      ]
+    },
+    {
+      "id": "amb-1-3565078980029174459",
+      "text": "He leaned back in his chair.",
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Enzo"
+      ]
+    },
+    {
+      "id": "amb-1-2671286036686345493",
+      "text": "Tell me what you need.",
+      "candidates": [
+        "Brad",
+        "Dante",
+        "Enzo"
+      ]
+    }
+  ]
+}
