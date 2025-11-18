@@ -1,5 +1,5 @@
 import streamlit as st
-from parsers.text_parser import ParseAnalysis
+from parser.text_parser import ParseAnalysis
 from audio.voice_manager import VoiceManager
 from audio.utils import get_flat_character_voices, get_flat_emotion_tags, CHARACTER_VOICES
 

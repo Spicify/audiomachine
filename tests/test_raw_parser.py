@@ -1,97 +1,46 @@
-from parsers.openai_parser.openai_parser import OpenAIParser
+import unittest
+
+from parser.local_adapter import parse_raw_prose_to_dialogue_format
 
 
-def run_tests():
-    tests = [
-        # --- Basic Attribution ---
-        {
-            "desc": "Post-quote attribution",
-            "input": '"Hi," said Brad. "I’m home," he said.',
-            "expected": ["[Brad]: Hi,", "[Brad]: I’m home,"]
-        },
-        {
-            "desc": "Narration-based last seen",
-            "input": "Brad entered. \"I’m home,\" he said.",
-            "expected": ["[Brad]: I’m home,"]
-        },
-        {
-            "desc": "Simple pronoun resolution",
-            "input": '"Hi," said Zara. Nathaniel looked at him and said "Hey". "What\'s up?" she replied.',
-            "expected": ["[Zara]: Hi,", "[Nathaniel]: Hey", "[Zara]: What's up?"]
-        },
-        {
-            "desc": "Fallback to narrator",
-            "input": "\"Hello there.\"",
-            "expected": ["[Narrator]: Hello there."]
-        },
+def _parse(text: str, include_narration: bool = True):
+    result = parse_raw_prose_to_dialogue_format(
+        text,
+        include_narration=include_narration,
+        user_cast=[
+            {"name": "Brad", "gender": "M", "enabled": True},
+            {"name": "Zara", "gender": "F", "enabled": True},
+            {"name": "Nathaniel", "gender": "M", "enabled": True},
+        ],
+        strict_mode=True,
+    )
+    return result.formatted_text.splitlines()
 
-        # --- Multiple Characters ---
-        {
-            "desc": "Conversation back and forth",
-            "input": '"Hello," said Brad. "Hi," said Zara. "How are you?" he asked.',
-            "expected": ["[Brad]: Hello,", "[Zara]: Hi,", "[Brad]: How are you?"]
-        },
-        {
-            "desc": "Ambiguous multiple males → fallback",
-            "input": '"Hey," said Brad. Nathaniel walked in. "Yo," he said.',
-            "expected": ["[Brad]: Hey,", "[Narrator]: Yo,"]
-        },
 
-        # --- Punctuation Handling ---
-        {
-            "desc": "British punctuation",
-            "input": '"Hello there." said Brad.',
-            "expected": ["[Brad]: Hello there."]
-        },
-        {
-            "desc": "US punctuation",
-            "input": '"Hello there", said Brad.',
-            # If parser strips comma → update expected
-            "expected": ["[Brad]: Hello there,"]
-        },
+class TestLocalParser(unittest.TestCase):
+    def test_post_quote_attribution(self):
+        lines = _parse('"Hi," said Brad. "I\'m home," he said.')
+        self.assertIn("brad", lines[0].lower())
+        self.assertIn("brad", lines[1].lower())
 
-        # --- Emotion/Adverb Inference ---
-        {
-            "desc": "Verb to emotion mapping",
-            "input": '"Go away!" shouted Brad.',
-            "expected": ["[Brad](angry): Go away!"]
-        },
-        {
-            "desc": "Adverb to emotion mapping",
-            "input": '"I’m fine," Brad said softly.',
-            "expected": ["[Brad](gentle): I’m fine,"]
-        },
+    def test_narration_based_resolution(self):
+        lines = _parse('Brad entered. "I\'m home," he said.')
+        self.assertTrue(any(line.lower().startswith("[brad]") for line in lines))
 
-        # --- Complex Narration ---
-        {
-            "desc": "Inline narration updates last seen",
-            "input": '"Hi," said Zara. Nathaniel smiled. "Hey there," he said.',
-            "expected": ["[Zara]: Hi,", "[Nathaniel]: Hey there,"]
-        },
-        {
-            "desc": "Pronoun chain with missing female (→ fallback)",
-            "input": 'Brad walked in. "Hello," he said. "How are you?" she asked. "I’m fine," he replied.',
-            "expected": ["[Brad]: Hello,", "[Narrator]: How are you?", "[Brad]: I’m fine,"]
-        },
-    ]
+    def test_fallback_to_narrator_when_unknown(self):
+        lines = _parse('"Hello there."')
+        line = lines[0].lower()
+        self.assertTrue(line.startswith("[narrator]") or line.startswith("[ambiguous]"))
 
-    for include_narration in (True, False):
-        print("\n===============================")
-        print(f"Testing with include_narration={include_narration}")
-        print("===============================")
+    def test_question_curiosity_emotion(self):
+        lines = _parse('"How are you?" he asked.')
+        combined = " ".join(lines).lower()
+        self.assertTrue("(curious)" in combined or "(soft)" in combined)
 
-        parser = OpenAIParser(
-            include_narration=include_narration)
-
-        for t in tests:
-            result = parser.convert(t["input"])
-            print(f"\n--- {t['desc']} ---")
-            for line in result.formatted_text.split("\n"):
-                print(line)
-            print("Expected:", t["expected"])
-            if not include_narration:
-                print("(Narration lines should be suppressed here)")
+    def test_exclude_narration_when_requested(self):
+        lines = _parse('"Hello," said Brad. Nathaniel waved. "Hi," he said.', include_narration=False)
+        self.assertTrue(all("narrator" not in line.lower() for line in lines))
 
 
 if __name__ == "__main__":
-    run_tests()
+    unittest.main()

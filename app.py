@@ -3,8 +3,7 @@ import streamlit as st
 from ui.auth import check_password
 from ui.sidebar import create_navigation_sidebar
 from ui.upload import create_file_upload_interface
-from parsers.text_parser import TextParser, cached_analyze_text, batched_analyze_text
-from parsers.openai_parser.openai_parser import OpenAIParser
+from parser.text_parser import TextParser, cached_analyze_text, batched_analyze_text
 from audio.utils import get_flat_character_voices
 from ui.analysis import display_analysis_results, create_voice_management_interface
 from ui.tabs.teaser_tab import create_teaser_generator_tab

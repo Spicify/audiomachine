@@ -1,0 +1,282 @@
+{
+  "🔥 Male Leads": {
+    "Mikhail": {
+      "voice_id": "Rp26tQpCpCg54ycIUr7H",
+      "gender": "M"
+    },
+    "Professor": {
+      "voice_id": "8S6ZMgJCL5LeTTGNzKye",
+      "gender": "M" 
+    },
+    "Dante": {
+      "voice_id": "abFrD0U0thqiU9PxyaXb",
+      "gender": "M"
+    }, 
+    "Enzo": {
+      "voice_id": "kM3yB77Ab8wxBqDgYTWt",
+      "gender": "M"
+    },
+    "Julian": {
+      "voice_id": "K6GcKaT2TS3Brh5oRlXD",
+      "gender": "M"
+    },
+    "Brad": {
+      "voice_id": "KH1SQLVulwP6uG4O3nmT",
+      "gender": "M"
+    },
+    "Declan": {
+      "voice_id": "kqVT88a5QfII1HNAEPTJ",
+      "gender": "M" 
+    },
+    "Edward": {
+      "voice_id": "goT3UYdM9bhm0n2lmKQx",
+      "gender": "M"
+    },
+    "Cornelius": {
+      "voice_id": "6sFKzaJr574YWVu4UuJF",
+      "gender": "M"
+    },
+    "Nathaniel": {
+      "voice_id": "AeRdCCKzvd23BpJoofzx",
+      "gender": "M"
+    }
+  },
+  "💖 Female Leads": {
+    "Aria": {
+      "voice_id": "P273DEoBwlO5ev6lwsRO",
+      "gender": "F"
+    },
+    "Clara": {
+      "voice_id": "jxm3fmkmDwLjT00e5PO1",
+      "gender": "F"
+    },
+    "Arabella": {
+      "voice_id": "aEO01A4wXwd1O8GPgGlF",
+      "gender": "F"
+    },
+    "Alexandra": {
+      "voice_id": "kdmDKE6EkgrWrrykO9Qt",
+      "gender": "F"
+    },
+    "Sam": {
+      "voice_id": "scOwDtmlUjD3prqpp97I",
+      "gender": "F"
+    },
+    "Eve": {
+      "voice_id": "BZgkqPqms7Kj9ulSkVzn",
+      "gender": "F"
+    },
+    "Zara": {
+      "voice_id": "jqcCZkN6Knx8BJ5TBdYR",
+      "gender": "F"
+    }
+  },
+  "👨‍👩‍👧‍👦 Family Characters": {
+    "Dad": {
+      "voice_id": "tukRtMY4szwA3WVu1E0n",
+      "gender": "M"
+    },
+    "Mother": {
+      "voice_id": "gQvztCKhpqj5IADlaegH",
+      "gender": "F"
+    },
+    "Mom": {
+      "voice_id": "7CLuuwn7OqA1vfbgHkH1",
+      "gender": "F"
+    },
+    "Victor": {
+      "voice_id": "H9SBJaXcZ8P6aGCFtTrE",
+      "gender": "M"
+    },
+    "Grandpa Spuds Oxley": {
+      "voice_id": "NOpBlnGInO9m6vDvFkFC",
+      "gender": "M"
+    },
+    "Jax Meridian": {
+      "voice_id": "iB0m5bo5Htdz0t9yE0xq",
+      "gender": "M"
+    },
+    "Adam (Family)": {
+      "voice_id": "7f6H8mstwSBsh6DmaGsu",
+      "gender": "M"
+    },
+    "Vincent": {
+      "voice_id": "S9WrLrqYPJzmQyWPWbZ5",
+      "gender": "M"
+    },
+    "Forge": {
+      "voice_id": "F6rDBJ205pxOgOMuBK3T",
+      "gender": "M"
+    },
+    "Teacher": {
+      "voice_id": "042yRDN3sgsopkNVGQrM",
+      "gender": "M"
+    }
+  },
+  "💼 Mafia/Bodyguards": {
+    "Guard": {
+      "voice_id": "dgWmurH8VCqHYZ6Wgmw3",
+      "gender": "M"
+    },
+    "Christian": {
+      "voice_id": "6xPz2opT0y5qtoRh1U1Y",
+      "gender": "M"
+    },
+    "Brian": {
+      "voice_id": "G0yjIg3xY8gEJZkHpjVm",
+      "gender": "M"
+    },
+    "David": {
+      "voice_id": "asDeXBMC8hUkhqqL7agO",
+      "gender": "M"
+    },
+    "Matthew": {
+      "voice_id": "e0K1gavG8dJdPZiwQ7Np",
+      "gender": "M"
+    }
+  },
+  "👫 Supporting Characters": {
+    "Sister": {
+      "voice_id": "frErotKJe0vq52U5gm8P",
+      "gender": "F"
+    },
+    "Maid": {
+      "voice_id": "cvcYO3vyInKW4WoThogz",
+      "gender": "F"
+    },
+    "Burt Reynolds": {
+      "voice_id": "4YYIPFl9wE5c4L2eu2Gb",
+      "gender": "M"
+    },
+    "Adam (Supporting)": {
+      "voice_id": "IRHApOXLvnW57QJPQH2P",
+      "gender": "M"
+    },
+    "James": {
+      "voice_id": "EkK5I93UQWFDigLMpZcX",
+      "gender": "M"
+    },
+    "Boyd": {
+      "voice_id": "gfRt6Z3Z8aTbpLfexQ7N",
+      "gender": "M"
+    }
+  },
+  "🧠 Utility Characters": {
+    "Carter": {
+      "voice_id": "6O8E1UOlJbvkhJDpV0aB",
+      "gender": "M"
+    },
+    "Mark": {
+      "voice_id": "UgBBYS2sOqTuMpoF3BR0",
+      "gender": "M"
+    },
+    "Lightsey": {
+      "voice_id": "7898AMdRTtesf0Y9zS54",
+      "gender": "M"
+    },
+    "Russ": {
+      "voice_id": "HKFOb9iktHA85uKXydRT",
+      "gender": "M"
+    },
+    "Adam Stone": {
+      "voice_id": "NFG5qt843uXKj4pFvR7C",
+      "gender": "M"
+    },
+    "Peter": {
+      "voice_id": "ZthjuvLPty3kTMaNKVKb",
+      "gender": "M"
+    }
+  },
+  "📚 Narrators": {
+    "Astro": {
+      "voice_id": "B5vjwBxGgp4GLTiUjDxM", 
+      "gender": "M"
+    },
+    "Soothing Narrator": {
+      "voice_id": "pVnrL6sighQX7hVz89cp",
+      "gender": "M"
+    },
+    "Stark": {
+      "voice_id": "a7vno2SJkTdglAq4liNI",
+      "gender": "M"
+    }
+  },
+  "💃 Female Cast": {
+    "Ivy": {
+      "voice_id": "i4CzbCVWoqvD0P1QJCUL",
+      "gender": "F"
+    },
+    "Clara (Secondary)": {
+      "voice_id": "Qggl4b0xRMiqOwhPtVWT",
+      "gender": "F"
+    },
+    "Sapphire": {
+      "voice_id": "zmcVlqmyk3Jpn5AVYcAL",
+      "gender": "F"
+    },
+    "Jessi": {
+      "voice_id": "09AoN6tYyW3VSTQqCo7C",
+      "gender": "F"
+    },
+    "Hope": {
+      "voice_id": "WAhoMTNdLdMoq1j3wf3I",
+      "gender": "F"
+    },
+    "Rosie": {
+      "voice_id": "V1sMnmZsNBJuEOA7aVqB",
+      "gender": "F"
+    },
+    "Lauren B": {
+      "voice_id": "v8DWAeuEGQSfwxqdH9t2",
+      "gender": "F"
+    },
+    "Shannon": {
+      "voice_id": "GP1bgf0sjoFuuHkyrg8E",
+      "gender": "F"
+    },
+    "Serafina": {
+      "voice_id": "4tRn1lSkEn13EVTuqb0g",
+      "gender": "F"
+    },
+    "Jenna": {
+      "voice_id": "qFjcP4hHD9WIdODvuJOJ",
+      "gender": "F"
+    },
+    "Maggie": {
+      "voice_id": "Jvx0SZHtelVH4bP2bPhY",
+      "gender": "F"
+    },
+    "Ivanna": {
+      "voice_id": "yM93hbw8Qtvdma2wCnJG",
+      "gender": "F"
+    },
+    "Jessica": {
+      "voice_id": "lxYfHSkYm1EzQzGhdbfc",
+      "gender": "F"
+    },
+    "Allison": {
+      "voice_id": "xctasy8XvGp2cVO9HL9k",
+      "gender": "F"
+    },
+    "Lilirose": {
+      "voice_id": "v1IIiVAN4yJaGycxWmjU",
+      "gender": "F"
+    },
+    "Lydia": {
+      "voice_id": "t1myskmYQbiTpxXcDfBx",
+      "gender": "F"
+    },
+    "Brittney": {
+      "voice_id": "pjcYQlDFKMbcOUp6F5GD",
+      "gender": "F"
+    },
+    "Delilah": {
+      "voice_id": "mZ3kbJNnKRWI4YzJXA9j",
+      "gender": "F"
+    },
+    "Jessa": {
+      "voice_id": "yj30vwTGJxSHezdAGsv9",
+      "gender": "F"
+    }
+  }
+}

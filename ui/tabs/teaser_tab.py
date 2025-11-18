@@ -1,7 +1,7 @@
 import streamlit as st
 import io
 from audio.generator import DialogueAudioGenerator
-from parsers.dialogue_parser import DialogueParser
+from parser.dialogue_parser import DialogueParser
 from utils.downloads import get_audio_download_link
 
 

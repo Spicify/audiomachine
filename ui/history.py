@@ -146,14 +146,12 @@ def create_history_tab():
 
         # Optional debug log
         try:
-            from parsers.openai_parser.openai_parser import DEBUG_PARSER_DIAG as _DBG
-        except Exception:
-            _DBG = False
-        try:
             import os as _os
-            if _os.getenv("DEBUG_MODE") == "1" or _DBG:
+            if _os.getenv("DEBUG_MODE") == "1":
                 print(
-                    f"[HISTORY_SORT] Ordered {len(entries)} items by JSON last_updated", flush=True)
+                    f"[HISTORY_SORT] Ordered {len(entries)} items by JSON last_updated",
+                    flush=True,
+                )
         except Exception:
             pass
 

@@ -1,0 +1,14 @@
+{
+  "angry": ["angry", "furious", "rage", "irritated", "snapped"],
+  "happy": ["happy", "joyful", "grin", "smiled", "laughed"],
+  "sad": ["sad", "melancholy", "tearful", "sorrow", "cried"],
+  "calm": ["calm", "gentle", "soft", "relaxed", "steady"],
+  "tense": ["tense", "nervous", "uneasy", "anxious"],
+  "confident": ["bold", "confident", "commanding", "assured"],
+  "fearful": ["afraid", "scared", "terrified", "panicked"]
+}
+
+
+
+
+

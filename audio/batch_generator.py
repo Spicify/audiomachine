@@ -21,7 +21,7 @@ from utils.s3_utils import s3_upload_bytes, s3_generate_presigned_url, s3_get_by
 from utils.s3_utils import get_s3_client, get_bucket_defaults
 from audio.utils import get_flat_character_voices
 from utils.voice_settings import normalize_settings
-from parsers.dialogue_parser import DialogueParser
+from parser.dialogue_parser import DialogueParser
 from audio.generator import DialogueAudioGenerator
 from utils.session_logger import log_to_session, log_exception
 from utils.log_instrumentation import log_timed_action
