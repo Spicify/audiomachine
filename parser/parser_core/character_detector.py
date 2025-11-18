@@ -32,6 +32,7 @@ class CharacterDetector:
     # Sentinel used when narration clearly refers to a non-user female subject
     # (e.g. "she" / "her") but no female user characters are configured.
     NON_USER_FEMALE_SUBJECT = "__NON_USER_FEMALE__"
+    NON_USER_FEMALE_DIALOGUE_TTL = 3
 
     def __init__(self, config_path: Optional[str] = None):
         """
@@ -1446,6 +1447,9 @@ class _StateAdapter:
         self.last_line = getattr(state, "last_line", None) if state else None
         self.last_subject = getattr(
             state, "last_subject", None) if state else None
+        self.pending_non_user_female = (
+            getattr(state, "pending_non_user_female", 0) if state else 0
+        )
 
     @property
     def state(self) -> Optional[Any]:
