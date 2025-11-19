@@ -27,6 +27,7 @@ _STOPWORDS = {
     "the",
     "and",
     "but",
+    "not",
     "she",
     "he",
     "they",
@@ -85,7 +86,121 @@ _STOPWORDS = {
     "prologue",
     "epilogue",
     "preface",
+    "mom",
+    "mother",
+    "dad",
+    "father",
+    "mama",
+    "papa",
+    "parents",
+    "brother",
+    "sister",
+    "aunt",
+    "uncle",
+    "grandma",
+    "grandpa",
+    "child",
+    "children",
+    "just",
+    "no",
+    "yes",
+    "every",
+    "like",
+    "my",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "first",
+    "second",
+    "third",
+    "only",
+    "always",
+    "never",
+    "maybe",
+    "still",
+    "again",
+    "already",
+    "suddenly",
+    "slowly",
+    "quickly",
+    "instantly",
+    "truly",
+    "honestly",
+    "finally",
+    "really",
+    "barely",
+    "nearly",
+    "almost",
+    "controlling",
+    "control",
+    "power",
+    "strength",
+    "soft",
+    "calm",
+    "gentle",
+    "angry",
+    "furious",
+    "dominant",
+    "commanding",
+    "submissive",
+    "fragile",
+    "cold",
+    "warm",
+    "dark",
+    "light",
+    "deep",
+    "shallow",
+    "long",
+    "short",
+    "wide",
+    "narrow",
+    "tired",
+    "restless",
+    "burning",
+    "aching",
+    "throbbing",
+    "fading",
+    "hungry",
+    "thirsty",
 }
+_GENERIC_NAME_TOKENS = {
+    "mom",
+    "mother",
+    "dad",
+    "father",
+    "mama",
+    "papa",
+    "parents",
+    "brother",
+    "sister",
+    "aunt",
+    "uncle",
+    "grandma",
+    "grandpa",
+    "child",
+    "baby",
+    "son",
+    "daughter",
+    "husband",
+    "wife",
+    "man",
+    "woman",
+    "boy",
+    "girl",
+}
+_SPEECH_VERBS_PATTERN = (
+    r"(?:said|asked|replied|whispered|shouted|yelled|muttered|sighed|cried|"
+    r"exclaimed|whimpered|murmured|growled|laughed|sobbed|noted|added|remarked|"
+    r"cursed|commanded|insisted|warned|teased|cooed|breathed|hissed|snapped|"
+    r"stated|responded|answered|called|promised|pleaded|begged)"
+)
 _LOWERCASE_NAME_PARTICLES = {
     "de",
     "del",
@@ -654,12 +769,31 @@ def _looks_like_character_name(name: str) -> bool:
     has_valid = False
     for token in tokens:
         lowered = token.lower()
+        if lowered in _GENERIC_NAME_TOKENS:
+            return False
         if lowered in _STOPWORDS:
             return False
         if token[0].islower() and lowered not in _LOWERCASE_NAME_PARTICLES:
             return False
         has_valid = True
     return has_valid
+
+
+def _has_speaker_context(name: str, text: str) -> bool:
+    if not name or not text:
+        return False
+    pattern = _SPEECH_VERBS_PATTERN
+    escaped = re.escape(name)
+    regexes = [
+        rf"\b{escaped}\b\s+{pattern}\b",
+        rf"{pattern}\s+\b{escaped}\b",
+        rf"\b{escaped}'s\b",
+        rf"\b{escaped},\s+{pattern}\b",
+    ]
+    for expr in regexes:
+        if re.search(expr, text, flags=re.IGNORECASE):
+            return True
+    return False
 
 
 def _should_skip_capitalized_token(token: str, text: str, start_idx: int) -> bool:
@@ -716,11 +850,14 @@ def _heuristic_name_candidates(text: str) -> List[str]:
             continue
         counts[token] += 1
 
+    context_map = {name: _has_speaker_context(name, text) for name in counts}
+
     for name, freq in counts.most_common(_MAX_AUTO_CHARACTERS * 2):
         key = _normalize_candidate_key(name)
         if not key or key in seen_keys:
             continue
-        if freq < 2 and " " not in name and name.lower() not in _VOICE_NAMES_LOWER:
+        has_context = context_map.get(name, False)
+        if freq < 2 and not has_context and name.lower() not in _VOICE_NAMES_LOWER:
             continue
         seen_keys.add(key)
         names.append(name)

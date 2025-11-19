@@ -33,6 +33,18 @@ class CharacterDetector:
     # (e.g. "she" / "her") but no female user characters are configured.
     NON_USER_FEMALE_SUBJECT = "__NON_USER_FEMALE__"
     NON_USER_FEMALE_DIALOGUE_TTL = 3
+    FEMALE_PRONOUNS = ("she", "her", "hers", "herself", "girl", "woman", "wife")
+    FEMALE_NOUN_CUES = (
+        "kitten",
+        "princess",
+        "queen",
+        "mistress",
+        "lover",
+        "pet",
+        "baby girl",
+        "little one",
+        "brat",
+    )
 
     def __init__(self, config_path: Optional[str] = None):
         """
@@ -275,25 +287,39 @@ class CharacterDetector:
             # Rule: narration_subject is authoritative if set
             subject = getattr(s, "last_subject", None)
             if kind == "dialogue" and subject:
-                if self.strict_user_mode and self.user_character_list:
-                    norm_subj = self._normalize_name(subject)
-                    if any(
-                        self._normalize_name(c) == norm_subj
-                        for c in self.user_character_list
-                    ):
+                if self._should_defer_subject(
+                    subject, s, next_line, line if isinstance(line, dict) else None
+                ):
+                    subject = None
+                elif subject == self.NON_USER_FEMALE_SUBJECT:
+                    self._set_pending_non_user_female(
+                        s, max(self.NON_USER_FEMALE_DIALOGUE_TTL - 1, 0)
+                    )
+                    return {"character": "Ambiguous"}
+                if subject:
+                    if self.strict_user_mode and self.user_character_list:
+                        norm_subj = self._normalize_name(subject)
+                        if any(
+                            self._normalize_name(c) == norm_subj
+                            for c in self.user_character_list
+                        ):
+                            self._update_state_with_speaker(s, subject)
+                            return {"character": subject}
+                    else:
                         self._update_state_with_speaker(s, subject)
                         return {"character": subject}
-                else:
-                    self._update_state_with_speaker(s, subject)
-                    return {"character": subject}
 
         # Strict user-driven mode short-circuit:
         # when enabled, we either use aggressive matching or the simpler
         # strict routine, depending on configuration.
         if self.strict_user_mode and self._user_name_order:
             if self.user_aggressive_mode:
-                return self._detect_user_aggressive(text, kind, state)
-            return self._detect_strict_user(text, kind, state)
+                return self._detect_user_aggressive(
+                    text, kind, state, next_line, line if isinstance(line, dict) else None
+                )
+            return self._detect_strict_user(
+                text, kind, state, next_line, line if isinstance(line, dict) else None
+            )
 
         # 1) Direct mention (name appears in text)
         direct_name = self._find_direct_name(text)
@@ -652,8 +678,21 @@ class CharacterDetector:
         subj = getattr(state_adapter, "last_subject", None)
         if subj and subj != self.NON_USER_FEMALE_SUBJECT:
             lower = text.lower()
-            if re.search(r"\b(he|him|his|she|her|hers)\b", lower):
+            has_female = re.search(r"\b(she|her|hers)\b", lower)
+            has_male = re.search(r"\b(he|him|his)\b", lower)
+            gender = self._gender_for_canonical(subj)
+            if has_female and not has_male:
+                if gender == "F":
+                    return subj
+                return None
+            if has_male and not has_female:
+                if gender in (None, "M"):
+                    return subj
+                return None
+            if not has_female and not has_male:
                 return subj
+            # Mixed pronouns → defer for later heuristics.
+            return None
         # Direct name in attribution
         direct = self._find_direct_name(text)
         if direct:
@@ -976,10 +1015,19 @@ class CharacterDetector:
         st = state_adapter.state
         if st is not None and hasattr(st, "last_subject"):
             setattr(st, "last_subject", subject)
+        if subject == self.NON_USER_FEMALE_SUBJECT:
+            self._set_pending_non_user_female(
+                state_adapter, self.NON_USER_FEMALE_DIALOGUE_TTL
+            )
         return subject
 
     def _detect_strict_user(
-        self, text: str, kind: str, state: Optional[Any]
+        self,
+        text: str,
+        kind: str,
+        state: Optional[Any],
+        next_line: Optional[Any],
+        line_dict: Optional[Any],
     ) -> Dict[str, Any]:
         """
         Strict user-driven detection path.
@@ -1000,6 +1048,16 @@ class CharacterDetector:
 
         # Defensive state wrapper for recency / last speaker.
         s = _StateAdapter(state)
+        text_str = text or ""
+        if kind == "dialogue":
+            if getattr(s, "last_subject", None) == self.NON_USER_FEMALE_SUBJECT:
+                if not self._consume_pending_non_user_female(s):
+                    self._set_pending_non_user_female(
+                        s, max(self.NON_USER_FEMALE_DIALOGUE_TTL - 1, 0)
+                    )
+                return {"character": "Ambiguous"}
+            if self._consume_pending_non_user_female(s):
+                return {"character": "Ambiguous"}
 
         # 1) Collect all user-supplied names that appear in this line.
         matches: List[str] = []
@@ -1028,13 +1086,24 @@ class CharacterDetector:
         # 2) If no explicit user-name mention, maybe a thought with first-person pronoun.
         if not unique_matches:
             first_person = re.search(
-                r"\b(I|I'm|I\'m|me|my|mine)\b", text or "", flags=re.IGNORECASE
+                r"\b(I|I'm|I\'m|I\u2019m|me|my|mine)\b", text_str or "", flags=re.IGNORECASE
             )
             if kind == "thought" or first_person:
+                if first_person:
+                    female_candidate = self._contextual_female_candidate(s, next_line, line_dict)
+                    if female_candidate:
+                        self._update_state_with_speaker(s, female_candidate)
+                        return {"character": female_candidate}
+                    if not self._female_user_candidates() and self._context_has_feminine_cue(
+                        s, next_line, line_dict
+                    ):
+                        self._set_pending_non_user_female(
+                            s, max(self.NON_USER_FEMALE_DIALOGUE_TTL - 1, 0)
+                        )
+                        return {"character": "Ambiguous"}
                 last = s.last_speaker
                 if last and last != "Ambiguous":
                     norm_last = self._normalize_name(last)
-                    # Only accept last speaker if they are part of the user set.
                     if any(
                         self._normalize_name(c) == norm_last
                         for c in self.user_character_list
@@ -1044,6 +1113,28 @@ class CharacterDetector:
                 return {"character": "Ambiguous"}
 
             if kind == "dialogue":
+                if not self.user_auto_assign_dialogue:
+                    return {"character": "Ambiguous"}
+                female_candidate = self._contextual_female_candidate(s, next_line, line_dict)
+                if female_candidate:
+                    self._update_state_with_speaker(s, female_candidate)
+                    return {"character": female_candidate}
+                if not self._female_user_candidates() and self._context_has_feminine_cue(
+                    s, next_line, line_dict
+                ):
+                    self._set_pending_non_user_female(
+                        s, max(self.NON_USER_FEMALE_DIALOGUE_TTL - 1, 0)
+                    )
+                    return {"character": "Ambiguous"}
+                last = s.last_speaker
+                if last and last != "Ambiguous":
+                    norm_last = self._normalize_name(last)
+                    if any(
+                        self._normalize_name(c) == norm_last
+                        for c in self.user_character_list
+                    ):
+                        self._update_state_with_speaker(s, last)
+                        return {"character": last}
                 return {"character": "Ambiguous"}
 
         # 3) If we have exactly one matching user name, choose it.
@@ -1077,7 +1168,12 @@ class CharacterDetector:
         return {"character": chosen}
 
     def _detect_user_aggressive(
-        self, text: str, kind: str, state: Optional[Any]
+        self,
+        text: str,
+        kind: str,
+        state: Optional[Any],
+        next_line: Optional[Any],
+        line_dict: Optional[Any],
     ) -> Dict[str, Any]:
         """
         Aggressive user-driven detection path.
@@ -1103,8 +1199,15 @@ class CharacterDetector:
         # characters), we avoid auto-assigning dialogue in strict/aggressive
         # mode. Such lines should remain Ambiguous when no explicit user cue
         # is present.
-        if kind == "dialogue" and getattr(s, "last_subject", None) == self.NON_USER_FEMALE_SUBJECT:
-            return {"character": "Ambiguous"}
+        if kind == "dialogue":
+            if getattr(s, "last_subject", None) == self.NON_USER_FEMALE_SUBJECT:
+                if not self._consume_pending_non_user_female(s):
+                    self._set_pending_non_user_female(
+                        s, max(self.NON_USER_FEMALE_DIALOGUE_TTL - 1, 0)
+                    )
+                return {"character": "Ambiguous"}
+            if self._consume_pending_non_user_female(s):
+                return {"character": "Ambiguous"}
 
         # 1) Variant-based matching for each canonical user name.
         matches: List[str] = []
@@ -1125,12 +1228,24 @@ class CharacterDetector:
             seen.add(key)
             unique_matches.append(name)
 
-        # 2) No explicit match → thought / pronoun or dialogue fallbacks.
+        # 2) No explicit match ? thought / pronoun or dialogue fallbacks.
         if not unique_matches:
             first_person = re.search(
-                r"\b(I|I'm|I\'m|I’m|me|my|mine)\b", text_str, flags=re.IGNORECASE
+                r"\b(I|I'm|I\'m|I\u2019m|me|my|mine)\b", text_str or "", flags=re.IGNORECASE
             )
             if kind == "thought" or first_person:
+                if first_person:
+                    female_candidate = self._contextual_female_candidate(s, next_line, line_dict)
+                    if female_candidate:
+                        self._update_state_with_speaker(s, female_candidate)
+                        return {"character": female_candidate}
+                    if not self._female_user_candidates() and self._context_has_feminine_cue(
+                        s, next_line, line_dict
+                    ):
+                        self._set_pending_non_user_female(
+                            s, max(self.NON_USER_FEMALE_DIALOGUE_TTL - 1, 0)
+                        )
+                        return {"character": "Ambiguous"}
                 last = s.last_speaker
                 if last and last != "Ambiguous":
                     norm_last = self._normalize_name(last)
@@ -1148,6 +1263,18 @@ class CharacterDetector:
                 if not self.user_auto_assign_dialogue:
                     return {"character": "Ambiguous"}
 
+                female_candidate = self._contextual_female_candidate(s, next_line, line_dict)
+                if female_candidate:
+                    self._update_state_with_speaker(s, female_candidate)
+                    return {"character": female_candidate}
+                if not self._female_user_candidates() and self._context_has_feminine_cue(
+                    s, next_line, line_dict
+                ):
+                    self._set_pending_non_user_female(
+                        s, max(self.NON_USER_FEMALE_DIALOGUE_TTL - 1, 0)
+                    )
+                    return {"character": "Ambiguous"}
+
                 last = s.last_speaker
                 if last and last != "Ambiguous":
                     norm_last = self._normalize_name(last)
@@ -1157,22 +1284,7 @@ class CharacterDetector:
                     ):
                         self._update_state_with_speaker(s, last)
                         return {"character": last}
-
-                # Simple alternation: use recent mentions to pick a different
-                # user speaker if possible.
-                recent = s.recent_mentions_reversed()
-                recent_norms = [self._normalize_name(n) for n in recent]
-                user_norms = [self._normalize_name(
-                    c) for c in self.user_character_list]
-
-                for rn in recent_norms:
-                    for cand, cn in zip(self.user_character_list, user_norms):
-                        if cn == rn:
-                            self._update_state_with_speaker(s, cand)
-                            return {"character": cand}
-
                 return {"character": "Ambiguous"}
-
         # 3) Single explicit match → choose directly.
         if len(unique_matches) == 1:
             chosen = unique_matches[0]
@@ -1405,6 +1517,100 @@ class CharacterDetector:
 
         return candidates
 
+    def _female_user_candidates(self) -> List[str]:
+        females: List[str] = []
+        for canonical in self.user_character_list:
+            if self._gender_for_canonical(canonical) == "F":
+                females.append(canonical)
+        return females
+
+    def _text_has_feminine_cue(self, text: str) -> bool:
+        if not text:
+            return False
+        lower = text.lower()
+        padded = f" {lower} "
+        if any(f" {p} " in padded for p in self.FEMALE_PRONOUNS):
+            return True
+        return any(cue in lower for cue in self.FEMALE_NOUN_CUES)
+
+    def _match_name_from_text(self, text: str, candidates: List[str]) -> Optional[str]:
+        if not text or not candidates:
+            return None
+        lower = text.lower()
+        for canonical in candidates:
+            tokens = [t for t in re.split(r"\s+", canonical) if t]
+            for tok in tokens:
+                tok_norm = tok.lower()
+                if re.search(rf"\b{re.escape(tok_norm)}\b", lower):
+                    return canonical
+        return None
+
+    def _contextual_female_candidate(
+        self, state_adapter, next_line: Optional[Any], line_dict: Optional[Any]
+    ) -> Optional[str]:
+        females = self._female_user_candidates()
+        if not females:
+            return None
+        subject = getattr(state_adapter, "last_subject", None)
+        if subject and subject in females:
+            return subject
+        texts: List[str] = []
+        prev = getattr(state_adapter, "last_line", None)
+        if isinstance(prev, dict):
+            texts.append(str(prev.get("text") or ""))
+        elif isinstance(prev, str):
+            texts.append(prev)
+        if isinstance(line_dict, dict):
+            texts.append(str(line_dict.get("attribution") or ""))
+        if next_line is not None:
+            if isinstance(next_line, dict):
+                texts.append(str(next_line.get("text") or ""))
+            else:
+                texts.append(str(next_line))
+        for snippet in texts:
+            candidate = self._match_name_from_text(snippet, females)
+            if candidate:
+                return candidate
+            if self._text_has_feminine_cue(snippet) and len(females) == 1:
+                return females[0]
+        return None
+
+    def _context_has_feminine_cue(
+        self, state_adapter, next_line: Optional[Any], line_dict: Optional[Any]
+    ) -> bool:
+        texts: List[str] = []
+        prev = getattr(state_adapter, "last_line", None)
+        if isinstance(prev, dict):
+            texts.append(str(prev.get("text") or ""))
+        elif isinstance(prev, str):
+            texts.append(prev)
+        if isinstance(line_dict, dict):
+            texts.append(str(line_dict.get("attribution") or ""))
+        if next_line is not None:
+            if isinstance(next_line, dict):
+                texts.append(str(next_line.get("text") or ""))
+            else:
+                texts.append(str(next_line))
+        return any(self._text_has_feminine_cue(t) for t in texts)
+
+    def _should_defer_subject(
+        self, subject: str, state_adapter, next_line: Optional[Any], line_dict: Optional[Any]
+    ) -> bool:
+        if not subject or subject == "Ambiguous":
+            return False
+        if subject == self.NON_USER_FEMALE_SUBJECT:
+            return False
+        femininity = self._context_has_feminine_cue(state_adapter, next_line, line_dict)
+        if not femininity:
+            return False
+        female_users = self._female_user_candidates()
+        if not female_users:
+            return True
+        gender = self._gender_for_canonical(subject)
+        if gender != "F":
+            return True
+        return False
+
     def _update_state_with_speaker(self, state_adapter, name: str):
         """
         Internal helper to update the parser state when a character is confidently detected.
@@ -1417,8 +1623,40 @@ class CharacterDetector:
             st = getattr(state_adapter, "state", None)
             if st is not None and hasattr(st, "last_subject"):
                 setattr(st, "last_subject", name)
+            self._set_pending_non_user_female(state_adapter, 0)
         except Exception:
             pass
+
+    def _pending_non_user_female(self, state_adapter) -> int:
+        try:
+            count = getattr(state_adapter, "pending_non_user_female", 0) or 0
+            return int(count)
+        except Exception:
+            return 0
+
+    def _set_pending_non_user_female(self, state_adapter, value: int) -> None:
+        count = 0
+        try:
+            count = max(0, int(value))
+        except Exception:
+            count = 0
+        try:
+            state_adapter.pending_non_user_female = count
+        except Exception:
+            pass
+        st = getattr(state_adapter, "state", None)
+        if st is not None:
+            try:
+                setattr(st, "pending_non_user_female", count)
+            except Exception:
+                pass
+
+    def _consume_pending_non_user_female(self, state_adapter) -> bool:
+        count = self._pending_non_user_female(state_adapter)
+        if count <= 0:
+            return False
+        self._set_pending_non_user_female(state_adapter, count - 1)
+        return True
 
 
 # ------------------------- small state adapter ------------------------- #
