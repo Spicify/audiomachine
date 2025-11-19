@@ -160,7 +160,6 @@ class CharacterDetector:
             user_name_str = str(user_name)
             if exists_in_config:
                 canonical = self._map_user_name_to_canonical(user_name_str)
-                # Fallback: if we cannot map to a known config name, keep the literal
                 if not canonical:
                     canonical = user_name_str
             else:
@@ -287,27 +286,22 @@ class CharacterDetector:
             # Rule: narration_subject is authoritative if set
             subject = getattr(s, "last_subject", None)
             if kind == "dialogue" and subject:
-                if self._should_defer_subject(
-                    subject, s, next_line, line if isinstance(line, dict) else None
-                ):
-                    subject = None
-                elif subject == self.NON_USER_FEMALE_SUBJECT:
+                if subject == self.NON_USER_FEMALE_SUBJECT:
                     self._set_pending_non_user_female(
                         s, max(self.NON_USER_FEMALE_DIALOGUE_TTL - 1, 0)
                     )
                     return {"character": "Ambiguous"}
-                if subject:
-                    if self.strict_user_mode and self.user_character_list:
-                        norm_subj = self._normalize_name(subject)
-                        if any(
-                            self._normalize_name(c) == norm_subj
-                            for c in self.user_character_list
-                        ):
-                            self._update_state_with_speaker(s, subject)
-                            return {"character": subject}
-                    else:
+                if self.strict_user_mode and self.user_character_list:
+                    norm_subj = self._normalize_name(subject)
+                    if any(
+                        self._normalize_name(c) == norm_subj
+                        for c in self.user_character_list
+                    ):
                         self._update_state_with_speaker(s, subject)
                         return {"character": subject}
+                else:
+                    self._update_state_with_speaker(s, subject)
+                    return {"character": subject}
 
         # Strict user-driven mode short-circuit:
         # when enabled, we either use aggressive matching or the simpler
@@ -478,11 +472,21 @@ class CharacterDetector:
         if not self.characters:
             return None
 
-        user_norm = self._normalize_name(user_name)
-        if not user_norm:
+        user_norm_full = self._normalize_name(user_name)
+        if not user_norm_full:
             return None
 
-        matches: List[Tuple[int, str, str]] = []
+        variants: List[Tuple[int, str]] = [(0, user_norm_full)]
+        seen_variants = {user_norm_full}
+        for tok in user_norm_full.split():
+            if not tok:
+                continue
+            if tok in seen_variants:
+                continue
+            seen_variants.add(tok)
+            variants.append((1, tok))
+
+        matches: List[Tuple[int, int, str, str]] = []
 
         for canon_key in self.characters.keys():
             canon_norm = self._normalize_name(canon_key)
@@ -490,34 +494,34 @@ class CharacterDetector:
                 continue
 
             tokens = canon_norm.split()
-            category: Optional[int] = None
+            best_entry: Optional[Tuple[int, int, str, str]] = None
 
-            # 1) Exact normalized equality
-            if canon_norm == user_norm:
-                category = 0
-            # 2) Canonical token equals user token
-            elif any(t == user_norm for t in tokens):
-                category = 1
-            # 3) Canonical token startswith user token
-            elif any(t.startswith(user_norm) for t in tokens):
-                category = 2
-            # 4) Canonical name contains user token somewhere
-            elif user_norm in canon_norm:
-                category = 3
+            for variant_priority, variant in variants:
+                category: Optional[int] = None
+                if canon_norm == variant:
+                    category = 0
+                elif any(t == variant for t in tokens):
+                    category = 1
+                elif any(t.startswith(variant) for t in tokens):
+                    category = 2
+                elif variant in canon_norm:
+                    category = 3
 
-            if category is not None:
-                matches.append((category, canon_norm, canon_key))
+                if category is None:
+                    continue
+
+                score = variant_priority * 10 + category
+                best_entry = (score, -len(canon_norm), canon_norm, canon_key)
+                break
+
+            if best_entry:
+                matches.append(best_entry)
 
         if not matches:
             return None
 
-        # Choose the lowest category (highest priority).
-        best_category = min(m[0] for m in matches)
-        best_matches = [m for m in matches if m[0] == best_category]
-
-        # Within the same category, prefer longest canonical name, then alphabetical.
-        best_matches.sort(key=lambda m: (-len(m[1]), m[1]))
-        return best_matches[0][2]
+        matches.sort(key=lambda m: (m[0], m[1], m[2]))
+        return matches[0][3]
 
     def _select_preferred_from_candidates(self, candidates: List[str]) -> Optional[str]:
         """
@@ -822,7 +826,7 @@ class CharacterDetector:
         Matching rules (in order):
 
         1) Explicit name at the start of the sentence:
-           - If the narration begins with a user's first token (e.g. "^Dante\\b"), choose that user.
+           - If the narration begins with a user's first token (e.g. "^Dante\b"), choose that user.
 
         2) Possessive mention:
            - Match "<name>'s", "<name>’s", or "<name>s" (case-insensitive). This handles
@@ -856,7 +860,7 @@ class CharacterDetector:
             if not tokens:
                 continue
             first = re.escape(tokens[0])
-            if re.match(rf"^\\s*{first}\\b", s, re.IGNORECASE):
+            if re.match(rf"^\\s*{first}\b", s, re.IGNORECASE):
                 return canonical
 
         # 2) Possessive forms for user names
@@ -867,7 +871,7 @@ class CharacterDetector:
                     continue
                 tok_esc = re.escape(tok)
                 poss_re = re.compile(
-                    rf"\\b{tok_esc}(?:['’]s|s)\\b", re.IGNORECASE)
+                    rf"\b{tok_esc}(?:['’]s|s)\b", re.IGNORECASE)
                 if poss_re.search(s):
                     return canonical
 
@@ -875,7 +879,7 @@ class CharacterDetector:
         explicitly_mentioned: set[str] = set()
         for canonical in self.user_character_list:
             for tok in canonical_tokens(canonical):
-                if re.search(rf"\\b{re.escape(tok)}\\b", s, re.IGNORECASE):
+                if re.search(rf"\b{re.escape(tok)}\b", s, re.IGNORECASE):
                     explicitly_mentioned.add(canonical)
                     break
 
@@ -891,11 +895,11 @@ class CharacterDetector:
                 female_users.append(canonical)
 
         # Male pronouns
-        if re.search(r"\\b(he|him|his)\\b", lower_s) and len(male_users) == 1:
+        if re.search(r"\b(he|him|his)\b", lower_s) and len(male_users) == 1:
             return male_users[0]
 
         # Female pronouns
-        if re.search(r"\\b(she|her|hers)\\b", lower_s) and len(female_users) == 1:
+        if re.search(r"\b(she|her|hers)\b", lower_s) and len(female_users) == 1:
             return female_users[0]
 
         return None
@@ -1593,23 +1597,6 @@ class CharacterDetector:
                 texts.append(str(next_line))
         return any(self._text_has_feminine_cue(t) for t in texts)
 
-    def _should_defer_subject(
-        self, subject: str, state_adapter, next_line: Optional[Any], line_dict: Optional[Any]
-    ) -> bool:
-        if not subject or subject == "Ambiguous":
-            return False
-        if subject == self.NON_USER_FEMALE_SUBJECT:
-            return False
-        femininity = self._context_has_feminine_cue(state_adapter, next_line, line_dict)
-        if not femininity:
-            return False
-        female_users = self._female_user_candidates()
-        if not female_users:
-            return True
-        gender = self._gender_for_canonical(subject)
-        if gender != "F":
-            return True
-        return False
 
     def _update_state_with_speaker(self, state_adapter, name: str):
         """

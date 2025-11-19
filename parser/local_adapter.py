@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -28,6 +29,17 @@ def _get_pipeline() -> ParserPipeline:
     return _PIPELINE
 
 
+def _sanitize_user_name(name: str) -> str:
+    cleaned = (name or "").strip()
+    if not cleaned:
+        return ""
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    match = re.match(r"(.+?)[\s\-,:]+(?:male|female|man|woman)\s*$", cleaned, flags=re.IGNORECASE)
+    if match:
+        cleaned = match.group(1).strip()
+    return cleaned
+
+
 def _reset_detector(detector: Any) -> None:
     try:
         detector.set_user_characters([])
@@ -43,22 +55,27 @@ def _reset_detector(detector: Any) -> None:
 
 
 def _prepare_user_entries(
-    user_cast: Optional[Sequence[Dict[str, Any]]],
+    user_cast: Optional[Sequence[Dict[str, Any]]], detector: Any
 ) -> Tuple[List[Tuple[str, bool, Optional[str]]], List[str]]:
     entries: List[Tuple[str, bool, Optional[str]]] = []
     new_names: List[str] = []
     if not user_cast:
         return entries, new_names
 
+    known_config_names = {k for k in getattr(detector, "characters", {}).keys()}
+
     for entry in user_cast:
         if not entry:
             continue
-        name = str(entry.get("name") or "").strip()
+        name = _sanitize_user_name(entry.get("name") or "")
         if not name:
             continue
         gender = entry.get("gender")
         exists_flag = entry.get("exists_in_config")
-        exists = bool(exists_flag) if exists_flag is not None else True
+        if exists_flag is None:
+            exists = name.lower() in known_config_names
+        else:
+            exists = bool(exists_flag)
         entries.append((name, exists, gender))
         if not exists:
             new_names.append(name)
@@ -117,7 +134,7 @@ def parse_raw_prose_to_dialogue_format(
     if user_characters:
         detector.set_preferred_characters(user_characters)
 
-    entries, new_names = _prepare_user_entries(user_cast)
+    entries, new_names = _prepare_user_entries(user_cast, detector)
     if entries:
         detector.set_user_characters(entries)
         detector.enable_strict_user_mode(bool(strict_mode))
