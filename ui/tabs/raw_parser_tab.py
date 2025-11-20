@@ -13,7 +13,7 @@ from parser.local_adapter import (
     format_lines_to_dialogue_text,
     parse_raw_prose_to_dialogue_format,
 )
-from parser.parser_core.pipeline import ParserPipeline
+from parser.openai_character_detector import detect_characters_via_openai
 
 _VOICE_DATA = get_flat_character_voices()
 _VOICE_NAMES_LOWER = {name.lower() for name in _VOICE_DATA.keys()}
@@ -446,7 +446,6 @@ def _handle_raw_text_submit() -> None:
         _populate_cast_from_text(text, force=True)
 
 _MAX_AUTO_CHARACTERS = 12
-_DETECTION_PIPELINE: Optional[ParserPipeline] = None
 
 
 def create_raw_parser_tab(get_known_characters_callable):
@@ -877,20 +876,6 @@ def _populate_cast_from_text(raw_text: str, *, force: bool) -> None:
     ]
 
 
-def _get_detection_pipeline() -> Optional[ParserPipeline]:
-    global _DETECTION_PIPELINE
-    if _DETECTION_PIPELINE is not None:
-        return _DETECTION_PIPELINE
-    try:
-        _DETECTION_PIPELINE = ParserPipeline(
-            character_config="parser/configs/character_voices.json",
-            emotion_config="parser/configs/emotions.json",
-        )
-    except Exception:
-        _DETECTION_PIPELINE = None
-    return _DETECTION_PIPELINE
-
-
 def _normalize_candidate_key(name: str) -> str:
     normalized = re.sub(r"[^a-z]+", " ", name.lower())
     return re.sub(r"\s+", " ", normalized).strip()
@@ -949,12 +934,6 @@ def _has_action_context(name: str, text: str) -> bool:
             flags=re.IGNORECASE,
         )
     )
-
-def _text_contains_name(text: str, name: str) -> bool:
-    if not text or not name:
-        return False
-    return bool(re.search(rf"\b{re.escape(name)}\b", text, flags=re.IGNORECASE))
-
 
 def _should_skip_capitalized_token(token: str, text: str, start_idx: int) -> bool:
     if not token:
@@ -1036,9 +1015,14 @@ def _auto_detect_characters(text: str) -> List[str]:
     if not text:
         return []
 
+    try:
+        candidates = detect_characters_via_openai(text)
+    except Exception as exc:
+        st.warning(f"Character auto-detection failed: {exc}")
+        return []
+
     usable: List[str] = []
     seen_keys: set[str] = set()
-
     def append_candidate(raw_name: str) -> None:
         display = (raw_name or "").strip()
         if not display or not _looks_like_character_name(display):
@@ -1049,30 +1033,8 @@ def _auto_detect_characters(text: str) -> List[str]:
         seen_keys.add(key)
         usable.append(display)
 
-    pipeline = _get_detection_pipeline()
-    if pipeline:
-        try:
-            pipeline.reset_state()
-            parsed_lines = pipeline.parse(text)
-        except Exception:
-            parsed_lines = []
-
-        counts: Counter[str] = Counter()
-        for line in parsed_lines:
-            character = (line.get("character") or "").strip()
-            if not character or character in {"Narrator", "Ambiguous"}:
-                continue
-            counts[character] += 1
-
-        for name, _ in counts.most_common(_MAX_AUTO_CHARACTERS * 2):
-            if not _text_contains_name(text, name):
-                continue
-            append_candidate(name)
-            if len(usable) >= _MAX_AUTO_CHARACTERS:
-                return usable
-
-    for fallback in _heuristic_name_candidates(text):
-        append_candidate(fallback)
+    for name in candidates:
+        append_candidate(name)
         if len(usable) >= _MAX_AUTO_CHARACTERS:
             break
 

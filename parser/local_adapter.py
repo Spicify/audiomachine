@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from uuid import uuid4
 
+from parser.openai_character_detector import detect_characters_via_openai
 from parser.parser_core.pipeline import ParserPipeline
 
 _PIPELINE: Optional[ParserPipeline] = None
@@ -136,10 +137,23 @@ def parse_raw_prose_to_dialogue_format(
     _reset_detector(detector)
     pipeline.reset_state()
 
+    generated_cast = list(user_cast or [])
+    auto_detected_cast: List[str] = []
+    if not generated_cast:
+        try:
+            auto_detected_cast = detect_characters_via_openai(text or "")
+        except Exception:
+            auto_detected_cast = []
+        if auto_detected_cast:
+            generated_cast = [
+                {"name": name, "gender": None, "enabled": True, "exists_in_config": None}
+                for name in auto_detected_cast
+            ]
+
     if user_characters:
         detector.set_preferred_characters(user_characters)
 
-    entries, new_names = _prepare_user_entries(user_cast, detector)
+    entries, new_names = _prepare_user_entries(generated_cast, detector)
     if entries:
         detector.set_user_characters(entries)
         detector.enable_strict_user_mode(bool(strict_mode))
@@ -166,6 +180,8 @@ def parse_raw_prose_to_dialogue_format(
         "raw_line_count": len(raw_lines),
         "line_count": len(filtered_lines),
     }
+    if auto_detected_cast:
+        metadata["auto_detected_characters"] = list(auto_detected_cast)
     history_path = _persist_run_history(
         text=text,
         user_cast=user_cast,
