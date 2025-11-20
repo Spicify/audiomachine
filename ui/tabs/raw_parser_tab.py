@@ -437,14 +437,6 @@ _STATE_DEFAULTS: Dict[str, Any] = {
     "raw_parser_cast_detected_hash": None,
 }
 
-
-def _handle_raw_text_submit() -> None:
-    text = st.session_state.get("raw_parser_input", "")
-    st.session_state["raw_parser_cast"] = []
-    st.session_state["raw_parser_cast_detected_hash"] = None
-    if text and text.strip():
-        _populate_cast_from_text(text, force=True)
-
 _MAX_AUTO_CHARACTERS = 12
 
 
@@ -480,7 +472,6 @@ def create_raw_parser_tab(get_known_characters_callable):
             "There was a sharp gasp as the door slammed."
         ),
         key="raw_parser_input",
-        on_change=_handle_raw_text_submit,
     )
 
     _render_character_configuration(raw_text)
@@ -511,13 +502,21 @@ def _render_parse_controls(
     include_narration: bool,
     get_known_characters_callable,
 ) -> None:
+    has_active_cast = any(
+        (entry.get("enabled", True) and entry.get("name"))
+        for entry in st.session_state.get("raw_parser_cast", [])
+    )
+
     col1, col2 = st.columns([3, 1])
     with col1:
         triggered = st.button(
             "Convert Raw -> Dialogue",
             type="primary",
             use_container_width=True,
+            disabled=not has_active_cast,
         )
+        if not has_active_cast:
+            st.caption("Add or detect characters to enable parsing.")
     with col2:
         if st.button(
             "Reset Parsed Output",
@@ -536,6 +535,9 @@ def _render_parse_controls(
         return
 
     user_cast = _collect_enabled_cast_entries()
+    if not user_cast:
+        st.error("Please detect or add at least one character before parsing.")
+        return
 
     with st.spinner("Parsing locally..."):
         known_chars = _safe_get_known_characters(get_known_characters_callable)
@@ -744,8 +746,6 @@ def _render_character_configuration(raw_text: str) -> None:
     )
 
     text_has_content = bool(raw_text and raw_text.strip())
-    if text_has_content and not st.session_state.get("raw_parser_cast"):
-        _populate_cast_from_text(raw_text, force=False)
 
     detect_col, add_col = st.columns([1, 1])
     with detect_col:
@@ -753,7 +753,7 @@ def _render_character_configuration(raw_text: str) -> None:
             "Detect from text",
             key="raw_cast_detect_btn",
             disabled=not text_has_content,
-            help="Auto-detect characters from the current prose.",
+            help="Auto-detect characters (names + genders) from the current prose.",
         )
     with add_col:
         add_clicked = st.button(
@@ -763,7 +763,10 @@ def _render_character_configuration(raw_text: str) -> None:
         )
 
     if detect_clicked:
-        _populate_cast_from_text(raw_text, force=True)
+        if _populate_cast_from_text(raw_text, force=True):
+            st.success("Characters detected. Review or edit them below.")
+        else:
+            st.warning("No characters could be detected automatically. Add them manually.")
 
     cast: List[Dict[str, Any]] = list(st.session_state.get("raw_parser_cast", []))
     if add_clicked:
@@ -847,33 +850,38 @@ def _collect_enabled_cast_entries() -> List[Dict[str, Any]]:
     return entries
 
 
-def _populate_cast_from_text(raw_text: str, *, force: bool) -> None:
+def _populate_cast_from_text(raw_text: str, *, force: bool) -> bool:
     text_clean = (raw_text or "").strip()
     if not text_clean:
-        return
+        return False
     text_hash = hashlib.sha1(text_clean.encode("utf-8")).hexdigest()
     existing_hash = st.session_state.get("raw_parser_cast_detected_hash")
     cast_present = bool(st.session_state.get("raw_parser_cast"))
     if not force and cast_present:
-        return
+        return False
     if not force and existing_hash == text_hash:
-        return
+        return False
 
     detected = _auto_detect_characters(text_clean)
     st.session_state["raw_parser_cast_detected_hash"] = text_hash
     if not detected:
-        if force:
-            st.warning("No characters could be detected automatically. Add them manually.")
-        return
+        return False
 
-    st.session_state["raw_parser_cast"] = [
-        {
-            "name": name,
-            "gender": _guess_gender_from_config(name),
-            "enabled": True,
-        }
-        for name in detected
-    ]
+    entries: List[Dict[str, Any]] = []
+    for item in detected:
+        name = (item.get("name") or "").strip()
+        if not name:
+            continue
+        gender_code = item.get("gender")
+        if gender_code is None:
+            gender_code = _guess_gender_from_config(name)
+        entries.append({"name": name, "gender": gender_code, "enabled": True})
+
+    if not entries:
+        return False
+
+    st.session_state["raw_parser_cast"] = entries
+    return True
 
 
 def _normalize_candidate_key(name: str) -> str:
@@ -1010,7 +1018,7 @@ def _heuristic_name_candidates(text: str) -> List[str]:
     return names
 
 
-def _auto_detect_characters(text: str) -> List[str]:
+def _auto_detect_characters(text: str) -> List[Dict[str, Optional[str]]]:
     text = (text or "").strip()
     if not text:
         return []
@@ -1021,24 +1029,40 @@ def _auto_detect_characters(text: str) -> List[str]:
         st.warning(f"Character auto-detection failed: {exc}")
         return []
 
-    usable: List[str] = []
+    usable: List[Dict[str, Optional[str]]] = []
     seen_keys: set[str] = set()
-    def append_candidate(raw_name: str) -> None:
-        display = (raw_name or "").strip()
-        if not display or not _looks_like_character_name(display):
-            return
-        key = _normalize_candidate_key(display)
-        if not key or key in seen_keys:
-            return
-        seen_keys.add(key)
-        usable.append(display)
 
-    for name in candidates:
-        append_candidate(name)
+    for entry in candidates:
+        name = (entry.get("name") or "").strip()
+        if not name or not _looks_like_character_name(name):
+            continue
+        key = _normalize_candidate_key(name)
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        usable.append(
+            {
+                "name": name,
+                "gender": _map_openai_gender_to_code(entry.get("gender")),
+            }
+        )
         if len(usable) >= _MAX_AUTO_CHARACTERS:
             break
 
     return usable
+
+
+def _map_openai_gender_to_code(label: Optional[str]) -> Optional[str]:
+    if not label:
+        return None
+    value = str(label).strip().lower()
+    if value == "male":
+        return "M"
+    if value == "female":
+        return "F"
+    if value == "nonbinary":
+        return "U"
+    return None
 
 
 def _guess_gender_from_config(name: str) -> Optional[str]:

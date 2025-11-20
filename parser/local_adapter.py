@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from uuid import uuid4
 
 from parser.openai_character_detector import detect_characters_via_openai
+from parser.openai_character_detector import detect_characters_via_openai
 from parser.parser_core.pipeline import ParserPipeline
 
 _PIPELINE: Optional[ParserPipeline] = None
@@ -58,6 +59,19 @@ def _reset_detector(detector: Any) -> None:
     detector.enable_strict_user_mode(False)
     detector.user_aggressive_mode = True
     detector.user_auto_assign_dialogue = True
+
+
+def _openai_gender_to_code(label: Optional[str]) -> Optional[str]:
+    if not label:
+        return None
+    value = str(label).strip().lower()
+    if value == "male":
+        return "M"
+    if value == "female":
+        return "F"
+    if value == "nonbinary":
+        return "U"
+    return None
 
 
 def _prepare_user_entries(
@@ -138,7 +152,7 @@ def parse_raw_prose_to_dialogue_format(
     pipeline.reset_state()
 
     generated_cast = list(user_cast or [])
-    auto_detected_cast: List[str] = []
+    auto_detected_cast: List[Dict[str, str]] = []
     if not generated_cast:
         try:
             auto_detected_cast = detect_characters_via_openai(text or "")
@@ -146,8 +160,13 @@ def parse_raw_prose_to_dialogue_format(
             auto_detected_cast = []
         if auto_detected_cast:
             generated_cast = [
-                {"name": name, "gender": None, "enabled": True, "exists_in_config": None}
-                for name in auto_detected_cast
+                {
+                    "name": entry["name"],
+                    "gender": _openai_gender_to_code(entry.get("gender")),
+                    "enabled": True,
+                    "exists_in_config": None,
+                }
+                for entry in auto_detected_cast
             ]
 
     if user_characters:
