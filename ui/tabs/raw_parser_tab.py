@@ -636,6 +636,7 @@ def _render_finalize_and_actions() -> None:
             use_container_width=True,
         ):
             _apply_ambiguity_choices(auto_finalize=False)
+            st.experimental_rerun()
         return
 
     formatted = st.session_state.get("raw_parser_formatted_text", "")
