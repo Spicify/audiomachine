@@ -629,14 +629,18 @@ def _render_ambiguity_controls(lines: List[Dict[str, Any]]) -> None:
 
 
 def _render_finalize_and_actions() -> None:
-    if not st.session_state.get("raw_finalized", False):
+    finalized = st.session_state.get("raw_finalized", False)
+    if not finalized:
         if st.button(
             "Finalize Parsed Output",
             type="primary",
             use_container_width=True,
         ):
             _apply_ambiguity_choices(auto_finalize=False)
-            st.experimental_rerun()
+            finalized = st.session_state.get("raw_finalized", False)
+        else:
+            return
+    if not finalized:
         return
 
     formatted = st.session_state.get("raw_parser_formatted_text", "")
