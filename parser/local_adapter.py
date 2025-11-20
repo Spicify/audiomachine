@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from uuid import uuid4
 
 from parser.parser_core.pipeline import ParserPipeline
 
 _PIPELINE: Optional[ParserPipeline] = None
 _DEFAULT_EMOTIONS = ["soft", "calm"]
+_HISTORY_DIR = Path("logs/parser_runs")
 
 
 @dataclass
@@ -161,6 +166,14 @@ def parse_raw_prose_to_dialogue_format(
         "raw_line_count": len(raw_lines),
         "line_count": len(filtered_lines),
     }
+    history_path = _persist_run_history(
+        text=text,
+        user_cast=user_cast,
+        formatted_text=formatted_text,
+        lines=filtered_lines,
+    )
+    if history_path:
+        metadata["history_file"] = str(history_path)
 
     return LocalParserAdapterResult(
         lines=filtered_lines,
@@ -186,3 +199,41 @@ def format_lines_to_dialogue_text(
         emo = "".join(f"({e})" for e in emotions if e)
         formatted.append(f"[{character}] {emo}: {text}".rstrip())
     return "\n".join(formatted)
+
+
+def _persist_run_history(
+    *,
+    text: str,
+    user_cast: Optional[Sequence[Dict[str, Any]]],
+    formatted_text: str,
+    lines: Sequence[Dict[str, Any]],
+) -> Optional[Path]:
+    try:
+        _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return None
+
+    payload = {
+        "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "user_input_story": text or "",
+        "user_cast": [
+            {
+                "name": (entry or {}).get("name"),
+                "gender": (entry or {}).get("gender"),
+                "exists_in_config": (entry or {}).get("exists_in_config"),
+            }
+            for entry in (user_cast or [])
+        ],
+        "parsed_output_text": formatted_text,
+        "parsed_lines": list(lines),
+    }
+    run_id = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+    history_path = _HISTORY_DIR / f"parser_run_{run_id}.json"
+    try:
+        history_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        return None
+    return history_path

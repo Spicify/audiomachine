@@ -28,6 +28,29 @@ _STOPWORDS = {
     "and",
     "but",
     "not",
+    "just",
+    "no",
+    "every",
+    "like",
+    "one",
+    "please",
+    "say",
+    "says",
+    "said",
+    "together",
+    "control",
+    "controlled",
+    "controlling",
+    "god",
+    "mom",
+    "mother",
+    "father",
+    "dad",
+    "brother",
+    "sister",
+    "baby",
+    "love",
+    "dear",
     "she",
     "he",
     "they",
@@ -195,11 +218,116 @@ _GENERIC_NAME_TOKENS = {
     "boy",
     "girl",
 }
-_SPEECH_VERBS_PATTERN = (
-    r"(?:said|asked|replied|whispered|shouted|yelled|muttered|sighed|cried|"
-    r"exclaimed|whimpered|murmured|growled|laughed|sobbed|noted|added|remarked|"
-    r"cursed|commanded|insisted|warned|teased|cooed|breathed|hissed|snapped|"
-    r"stated|responded|answered|called|promised|pleaded|begged)"
+_SPEECH_VERB_FORMS = [
+    "say",
+    "says",
+    "said",
+    "ask",
+    "asks",
+    "asked",
+    "reply",
+    "replies",
+    "replied",
+    "whisper",
+    "whispers",
+    "whispered",
+    "shout",
+    "shouts",
+    "shouted",
+    "yell",
+    "yells",
+    "yelled",
+    "mutter",
+    "mutters",
+    "muttered",
+    "sigh",
+    "sighs",
+    "sighed",
+    "cry",
+    "cries",
+    "cried",
+    "exclaim",
+    "exclaims",
+    "exclaimed",
+    "whimper",
+    "whimpers",
+    "whimpered",
+    "murmur",
+    "murmurs",
+    "murmured",
+    "growl",
+    "growls",
+    "growled",
+    "laugh",
+    "laughs",
+    "laughed",
+    "sob",
+    "sobs",
+    "sobbed",
+    "note",
+    "notes",
+    "noted",
+    "add",
+    "adds",
+    "added",
+    "remark",
+    "remarks",
+    "remarked",
+    "curse",
+    "curses",
+    "cursed",
+    "command",
+    "commands",
+    "commanded",
+    "insist",
+    "insists",
+    "insisted",
+    "warn",
+    "warns",
+    "warned",
+    "tease",
+    "teases",
+    "teased",
+    "coo",
+    "coos",
+    "cooed",
+    "breathe",
+    "breathes",
+    "breathed",
+    "hiss",
+    "hisses",
+    "hissed",
+    "snap",
+    "snaps",
+    "snapped",
+    "state",
+    "states",
+    "stated",
+    "respond",
+    "responds",
+    "responded",
+    "answer",
+    "answers",
+    "answered",
+    "call",
+    "calls",
+    "called",
+    "promise",
+    "promises",
+    "promised",
+    "plead",
+    "pleads",
+    "pleaded",
+    "beg",
+    "begs",
+    "begged",
+]
+_SPEECH_VERBS_PATTERN = r"(?:%s)" % "|".join(_SPEECH_VERB_FORMS)
+_ACTION_CONTEXT_PATTERN = (
+    r"(?:reached|walked|ran|strode|smiled|grinned|laughed|stared|gazed|"
+    r"looked|leaned|touched|grabbed|kissed|held|took|pressed|wrapped|"
+    r"cupped|slid|moved|bent|whispered|murmured|moaned|sighed|shivered|"
+    r"gasped|nodded|shrugged|rose|sat|stood|approached)"
 )
 _LOWERCASE_NAME_PARTICLES = {
     "de",
@@ -308,6 +436,15 @@ _STATE_DEFAULTS: Dict[str, Any] = {
     "raw_parser_cast": [],
     "raw_parser_cast_detected_hash": None,
 }
+
+
+def _handle_raw_text_submit() -> None:
+    text = st.session_state.get("raw_parser_input", "")
+    st.session_state["raw_parser_cast"] = []
+    st.session_state["raw_parser_cast_detected_hash"] = None
+    if text and text.strip():
+        _populate_cast_from_text(text, force=True)
+
 _MAX_AUTO_CHARACTERS = 12
 _DETECTION_PIPELINE: Optional[ParserPipeline] = None
 
@@ -344,6 +481,7 @@ def create_raw_parser_tab(get_known_characters_callable):
             "There was a sharp gasp as the door slammed."
         ),
         key="raw_parser_input",
+        on_change=_handle_raw_text_submit,
     )
 
     _render_character_configuration(raw_text)
@@ -795,6 +933,28 @@ def _has_speaker_context(name: str, text: str) -> bool:
             return True
     return False
 
+def _has_action_context(name: str, text: str) -> bool:
+    if not name or not text:
+        return False
+    escaped = re.escape(name)
+    return bool(
+        re.search(
+            rf"\b{escaped}\b\s+(?:{_ACTION_CONTEXT_PATTERN})\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+        or re.search(
+            rf"\b{escaped}'s\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
+
+def _text_contains_name(text: str, name: str) -> bool:
+    if not text or not name:
+        return False
+    return bool(re.search(rf"\b{re.escape(name)}\b", text, flags=re.IGNORECASE))
+
 
 def _should_skip_capitalized_token(token: str, text: str, start_idx: int) -> bool:
     if not token:
@@ -827,7 +987,8 @@ def _heuristic_name_candidates(text: str) -> List[str]:
         if not _looks_like_character_name(display_name):
             continue
         key = display_name.lower()
-        count = lower_text.count(key)
+        pattern = re.compile(rf"\b{re.escape(key)}\b")
+        count = len(pattern.findall(lower_text))
         if count:
             canonical_hits.append((display_name, count))
 
@@ -850,7 +1011,10 @@ def _heuristic_name_candidates(text: str) -> List[str]:
             continue
         counts[token] += 1
 
-    context_map = {name: _has_speaker_context(name, text) for name in counts}
+    context_map = {
+        name: _has_speaker_context(name, text) or _has_action_context(name, text)
+        for name in counts
+    }
 
     for name, freq in counts.most_common(_MAX_AUTO_CHARACTERS * 2):
         key = _normalize_candidate_key(name)
@@ -900,7 +1064,9 @@ def _auto_detect_characters(text: str) -> List[str]:
                 continue
             counts[character] += 1
 
-        for name, _ in counts.most_common(_MAX_AUTO_CHARACTERS):
+        for name, _ in counts.most_common(_MAX_AUTO_CHARACTERS * 2):
+            if not _text_contains_name(text, name):
+                continue
             append_candidate(name)
             if len(usable) >= _MAX_AUTO_CHARACTERS:
                 return usable
